@@ -92,7 +92,6 @@
     #profName{max-width:150px;padding:8px 12px}
     #profMenu{min-width:220px;max-width:78vw}
   }
-  main{max-width:760px;margin:0 auto;padding:20px}
   .adv-wrap{max-width:1180px}
   .card{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;margin-bottom:22px;box-shadow:var(--e-2)}
   .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 14px;font-weight:700}
@@ -588,7 +587,7 @@
       <div class="ss-row"><span class="ss-dot" id="ssGpsDot"></span><span id="ssGps">GPS off</span></div>
     </div>
   </nav>
-  <div id="content">
+  <main id="content">
 
 <div class="page" id="page-home">
   <div class="mc-hero">
@@ -660,7 +659,7 @@
       <label class="hint" style="display:flex;align-items:center;gap:9px;color:var(--muted)">Rotate <input type="range" min="0" max="359" value="0" id="siteRot" oninput="setSiteRot(this.value)" style="width:140px"></label>
       <label class="hint" style="display:flex;align-items:center;gap:9px;color:var(--muted)">Size <input type="range" min="20" max="320" value="100" id="siteScale" oninput="setSiteScale(this.value)" style="width:140px"></label>
     </div>
-    <div id="siteWrap" onclick="onSiteTap(event)"><canvas id="siteCanvas"></canvas></div>
+    <div id="siteWrap" onclick="onSiteTap(event)"><canvas id="siteCanvas" role="img" aria-label="Site plan: the GPS-walked yard boundary with the house placed inside it."></canvas></div>
   </div>
 </div>
 
@@ -826,7 +825,7 @@
       <div id="mapWrap" onclick="onMapTap(event)">
         <img id="planImg" alt="floor plan">
         <div id="roomsLayer"></div>
-        <canvas id="heatCanvas"></canvas>
+        <canvas id="heatCanvas" role="img" aria-label="Coverage heatmap. The readings table below lists every measurement with its room, signal and rating."></canvas>
         <div id="dotsLayer"></div>
         <div id="youHere" aria-hidden="true"></div>
       </div>
@@ -1116,16 +1115,16 @@
   </div><!-- /page-advanced -->
   <div class="page hidden" id="page-guide">
     <div class="card"><h2>What each page does</h2>
-      <p class="muted" style="margin-top:0">The seven pages in the left nav — each one answers a different question.</p>
+      <p class="muted" style="margin-top:0">The pages in the left nav — each one answers a different question.</p>
       <div id="guidePages"></div></div>
     <div class="card"><h2>Which tool should I use?</h2>
       <p class="muted" style="margin-top:0">Each tool answers one question well. Pick by the question you're trying to answer.</p>
       <div id="guideTools"></div></div>
     <div class="card"><h2>Recommended survey workflow</h2><div id="guideFlow"></div></div>
     <div class="card"><h2>Glossary — what the terms mean</h2><div id="glossary" class="glossary"></div></div>
-    <div class="card"><p class="muted" style="margin:0">Want the deep reference? The full written walkthrough is <b>USER_GUIDE.md</b> in the app folder (<code>~/wifi-survey/</code>).</p></div>
+    <div class="card"><p class="muted" style="margin:0">Want the deep reference? The full written walkthrough is <b>USER_GUIDE.md</b> in the app folder (the folder this app was started from).</p></div>
   </div>
-  </div><!-- /content -->
+  </main><!-- /content -->
 </div><!-- /layout -->
 
 <div id="floatDbm" onclick="document.getElementById('miniSig')&&document.getElementById('miniSig').scrollIntoView({behavior:'smooth',block:'center'})" title="Tap to jump to Save">

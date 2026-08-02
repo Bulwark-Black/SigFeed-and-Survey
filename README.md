@@ -3,7 +3,7 @@
 A self-contained local web tool for professional Wi‑Fi and cellular site
 surveys on a Mac. Build a coverage heatmap, aim a cellular gateway/antenna, walk
 a property by phone GPS, and print a client-ready PDF — all on your machine, no
-cloud or login, nothing to install beyond the Python that ships with macOS.
+cloud or login, nothing to install but Python 3.
 
 > **Full walkthrough:** see **[USER_GUIDE.md](USER_GUIDE.md)** — how to run a
 > clean survey end to end, page by page. This README is just the quick start.
@@ -15,13 +15,17 @@ the dashboard.
 
 **Or from a terminal:**
 ```bash
-cd ~/wifi-survey
+cd path/to/SigFeed-and-Survey
 python3 survey_server.py
 ```
 Then open <http://127.0.0.1:8765>. Press `Ctrl+C` to stop.
 
+macOS may offer to install Apple's Command Line Tools the first time. Accept it,
+or run `xcode-select --install` first.
+
 **From your phone:** on the same Wi‑Fi, open `http://<your-mac's-IP>:8765` — this
-is what powers the walk-the-property GPS feature.
+is what powers the walk-the-property GPS feature. macOS will ask once whether to
+allow incoming connections; that's the phone link, so allow it.
 
 ## What it does
 

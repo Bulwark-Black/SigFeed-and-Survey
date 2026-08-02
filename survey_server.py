@@ -2,7 +2,7 @@
 """
 WiFi Site Survey - local mission-control backend.
 
-Zero third-party dependencies (macOS system Python 3.9 is fine). Serves a
+Zero third-party dependencies; any Python 3.9+ works. Serves a
 dashboard and exposes small JSON endpoints that shell out to native macOS
 tools:
 

@@ -708,10 +708,18 @@ async function runPing() {
 }
 
 /* ---------- cellular / antenna aiming ---------- */
+let cellSeq = 0;        // newest request wins — a gateway read can take longer than one interval
+let cellInFlight = false;
+let cellFails = 0;
+
 async function connectCell() {
+  // A read can take up to 16s (login + fetch) against a 6s refresh, so without this the
+  // requests pile up and can resolve out of order — showing an older reading as the newer one.
+  if (cellInFlight) return;
+  cellInFlight = true;
+  const seq = ++cellSeq;
   const ip = $("cellIp").value.trim();
   const pass = $("cellPass").value;
-  const st = $("cellStatus");
   const b = $("btnCell");
   b.disabled = true;
   b.innerHTML = '<span class="spin"></span>';
@@ -723,11 +731,20 @@ async function connectCell() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ip, password: pass }),
     });
+    if (seq !== cellSeq) return;              // a newer read already landed
     if (!d.ok) {
+      cellFails++;
       setCellBadge("stale", "⚠️", d.error || "Couldn't read the gateway.", "Check the address and admin password, and that you're on the gateway's Wi-Fi.");
-      $("cellResults").classList.add("hidden");
-      stopCellAuto();
+      // Don't tear down the auto-refresh on one miss — moving the gateway is exactly what
+      // this page is for, and that is precisely when a read drops. Keep the last numbers on
+      // screen (marked stale) and give it a few tries before giving up.
+      if (cellTimer && cellFails >= 5) {
+        stopCellAuto();
+        setCellBadge("stale", "⚠️", "Lost the gateway — auto-refresh stopped.", "Reconnect once it's back on the network.");
+      }
+      if (!lastCell) $("cellResults").classList.add("hidden");
     } else {
+      cellFails = 0;
       lastCell = d;
       renderCell(d);
       renderCellSpots();
@@ -735,14 +752,18 @@ async function connectCell() {
       const band5g = (d.nr && d.nr.bands) ? " · 5G " + d.nr.bands : (d.lte && d.lte.bands ? " · LTE " + d.lte.bands : "");
       const when = d.ts ? d.ts.split("T")[1] : "";
       setCellBadge("ok", "✅", `Connected — ${d.model || "gateway"}${band5g}`, `Updated ${when} · let readings settle ~15s before comparing spots.`);
-      localStorage.setItem(LS_CELL, JSON.stringify({ ip, pass }));
+      store(LS_CELL, JSON.stringify({ ip, pass }));
     }
   } catch (e) {
-    setCellBadge("stale", "⚠️", "Could not reach the tool backend.", "Is the survey server running on this Mac?");
+    if (seq === cellSeq) setCellBadge("stale", "⚠️", "Could not reach the tool backend.", "Is the survey server running on this Mac?");
+  } finally {
+    cellInFlight = false;
+    if (seq === cellSeq) {
+      renderSummary();
+      b.disabled = false;
+      b.textContent = "Connect";
+    }
   }
-  renderSummary();
-  b.disabled = false;
-  b.textContent = "Connect";
 }
 function renderCell(d) {
   setCell("nr", d.nr);
@@ -888,13 +909,18 @@ function cellVerdict(s) {
 }
 function toggleCellAuto() {
   if ($("cellAuto").checked) {
+    cellFails = 0;
     connectCell();
-    cellTimer = setInterval(connectCell, 6000);
+    // re-armed from each response rather than a fixed interval, so a slow gateway spaces the
+    // reads out instead of queueing them up behind each other
+    const tick = () => { connectCell().finally(() => { if (cellTimer) cellTimer = setTimeout(tick, 6000); }); };
+    cellTimer = setTimeout(tick, 6000);
   } else stopCellAuto();
 }
 function stopCellAuto() {
-  if (cellTimer) clearInterval(cellTimer);
+  if (cellTimer) clearTimeout(cellTimer);
   cellTimer = null;
+  cellFails = 0;
   if ($("cellAuto")) $("cellAuto").checked = false;
 }
 
@@ -976,7 +1002,7 @@ function renderHeatmapThumb() {
   const el = $("heatmapThumb");
   if (!el) return;
   el.innerHTML = heatmapDataUrl
-    ? `<div style="margin-top:12px"><img src="${heatmapDataUrl}" style="max-height:130px;border-radius:8px;border:1px solid var(--line)"><br>
+    ? `<div style="margin-top:12px"><img src="${safeImgSrc(heatmapDataUrl)}" style="max-height:130px;border-radius:8px;border:1px solid var(--line)"><br>
        <button class="ghost" style="margin-top:8px;font-size:13px" onclick="removeHeatmap()">✕ Remove heatmap</button></div>`
     : "";
 }
@@ -1033,7 +1059,7 @@ function renderReportPhotos() {
   el.innerHTML = reportPhotos.map((p, i) =>
     `<div class="rpthumb">
        <button class="rpx" title="Remove" onclick="removeReportPhoto(${i})">✕</button>
-       <img src="${p.url}" alt="site photo ${i + 1}">
+       <img src="${safeImgSrc(p.url)}" alt="site photo ${i + 1}">
        <input type="text" value="${esc(p.caption || "")}" placeholder="Caption (optional)"
               oninput="setPhotoCaption(${i}, this.value)">
      </div>`).join("");
@@ -3434,8 +3460,18 @@ function genReport() {
   w.document.close();
 }
 
+// Includes the apostrophe: several attributes in this file are single-quoted, and a name
+// containing one would otherwise close the attribute early.
 function esc(s) {
-  return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// A data:/blob: URL for an <img src>. Everything here is produced locally by canvas.toDataURL
+// or FileReader, but these values also arrive from imported .json survey files, which are
+// hand-editable — so an imported survey shouldn't be able to inject a javascript: URL.
+function safeImgSrc(u) {
+  const s = String(u || "");
+  return /^(data:image\/|blob:)/i.test(s) ? s.replace(/"/g, "&quot;") : "";
 }
 
 function healthBadge(ins, size) {
@@ -3560,12 +3596,12 @@ function buildReport(site, pts) {
   const levelShots = levels.filter((l) => l.snapshot);
   if (levelShots.length) {
     heatmapSection = levelShots.map((l) =>
-      `<h2>Coverage — ${esc(l.name)}</h2><img class="hm" src="${l.snapshot}">${floorFigures(l)}`).join("");
+      `<h2>Coverage — ${esc(l.name)}</h2><img class="hm" src="${safeImgSrc(l.snapshot)}">${floorFigures(l)}`).join("");
   } else {
     const coverImg = generateMapDataURL() || heatmapDataUrl;
     const cur = levels.find((l) => l.id === activeLevel);
     heatmapSection = coverImg
-      ? `<h2>Coverage Heatmap</h2><img class="hm" src="${coverImg}">${cur ? floorFigures(cur) : ""}` : "";
+      ? `<h2>Coverage Heatmap</h2><img class="hm" src="${safeImgSrc(coverImg)}">${cur ? floorFigures(cur) : ""}` : "";
   }
   if (heatmapSection) {
     heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label} — Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}) — weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>
@@ -3651,7 +3687,7 @@ function buildReport(site, pts) {
   // site photos & screenshots
   let photosSection = "";
   if (reportPhotos.length) {
-    const cards = reportPhotos.map((p) => `<figure class="pfig"><img src="${p.url}" alt="site photo">${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ""}</figure>`).join("");
+    const cards = reportPhotos.map((p) => `<figure class="pfig"><img src="${safeImgSrc(p.url)}" alt="site photo">${p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : ""}</figure>`).join("");
     photosSection = `<h2>Site Photos</h2><div class="pgrid">${cards}</div>`;
   }
 
@@ -4322,8 +4358,17 @@ if ($("f_client")) $("f_client").addEventListener("input", syncActiveName);  // 
 renderProfileMenu();
 renderHeatUI();
 showPage(localStorage.getItem(LS_PAGE) || "home");
-window.addEventListener("resize", renderCoverageMap);
-window.addEventListener("resize", renderSitePlan);
+// Both redraws run per-pixel interpolation over the whole canvas. Fired raw, a drag-resize
+// queues one full pass per resize event and locks the main thread; coalesce to one per frame.
+let resizeRaf = null;
+window.addEventListener("resize", () => {
+  if (resizeRaf) return;
+  resizeRaf = requestAnimationFrame(() => {
+    resizeRaf = null;
+    renderCoverageMap();
+    renderSitePlan();
+  });
+});
 document.addEventListener("click", (e) => { if (!e.target.closest(".dropdown")) closeDrops(); });
 if ($("siteWrap")) {
   const sw = $("siteWrap");

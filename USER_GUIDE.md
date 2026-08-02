@@ -6,8 +6,9 @@ built into the app on the **Guide** page.
 
 - **What it is:** a self-contained web app that runs on your Mac. It maps Wi‑Fi
   coverage, aims a cellular gateway/antenna, walks a property by GPS, and prints
-  a client-ready PDF — with no cloud, no login, and no install beyond the Python
-  that already ships with macOS.
+  a client-ready PDF — with no cloud, no login, and nothing to install but
+  Python 3. The first run may ask to install Apple's Command Line Tools; accept
+  it, or run `xcode-select --install` beforehand.
 - **Who it's for:** you, on-site, doing a paid survey. Everything stays on your
   machine.
 
@@ -15,12 +16,12 @@ built into the app on the **Guide** page.
 
 ## 1. Start & stop
 
-**Start (easiest):** double-click **`start.command`** in `~/wifi-survey/`. It
+**Start (easiest):** double-click **`start.command`** in the app folder. It
 launches the server and opens your browser to the dashboard.
 
 **Start (terminal):**
 ```bash
-cd ~/wifi-survey
+cd path/to/SigFeed-and-Survey
 python3 survey_server.py
 ```
 Then open <http://127.0.0.1:8765>. Press **Ctrl+C** in the terminal to stop.
@@ -32,13 +33,16 @@ This is what makes the walk-the-property GPS feature work (section 8).
 
 ---
 
-## 2. The seven pages
+## 2. The pages
 
-The left nav has seven pages. Each answers one question:
+The left nav is grouped into **Survey**, **Deliver** and **Tools**. Each page
+answers one question:
 
 | Page | What it's for |
 |------|---------------|
+| **Mission Control** | The hub. Your score, survey vitals, a progress checklist and the top findings, all on one screen. |
 | **Live** | Stand somewhere and read the signal *right now* — a big signal gauge plus a one-tap speed test (download / upload / responsiveness). |
+| **Site Plan** | Walk a yard by GPS and place a hand-drawn house inside it. |
 | **Coverage** | The main event: build a map, walk the space, tap where you stand, and watch the heatmap fill in. Your deliverable comes from here. |
 | **Cellular** | Aim a home cellular gateway / Waveform antenna — find the window or wall with the best tower signal (RSRP / SINR). |
 | **GPS** | Walk a property outdoors with your phone's GPS, drop points and corners, trace a boundary, export to Google Earth. |
