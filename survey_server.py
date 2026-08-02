@@ -11,12 +11,27 @@ tools:
   ping                               -> latency + packet loss
   open -a <App>                      -> launch NetSpot / WiFi Explorer / etc.
 
-Bind is localhost-only on purpose; this is an operator tool, not a service.
+Binds LAN-wide, not localhost: the phone GPS bridge and the phone view of the
+dashboard both need to reach this Mac from another device on the same Wi-Fi.
+
+That makes the trust boundary the local network, so:
+  * /api/* requires the key printed at startup. The dashboard gets it injected
+    when it is served; the GPS URL shown on the GPS page already carries it.
+  * The Host header is checked, which is what stops a web page the technician
+    happens to be browsing from reaching this server by rebinding a DNS name.
+  * POSTs must be application/json, so a cross-origin form post can't reach an
+    endpoint without first passing a CORS preflight (which is never answered).
+Anyone already on the same LAN who can load the dashboard can read the key from
+it — that is inherent to serving the UI to a phone. The key is aimed at the
+realistic attack, which is a malicious web page, not a hostile guest network.
 """
 
+import hmac
+import ipaddress
 import json
 import os
 import re
+import secrets
 import socket
 import subprocess
 import threading
@@ -31,6 +46,8 @@ from urllib.parse import urlparse, parse_qs
 HOST = "0.0.0.0"  # bind LAN-wide so a phone can POST its GPS to this Mac
 PORT = 8765
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# New every run: nothing to store, and a stale bookmark simply stops working.
+API_KEY = secrets.token_urlsafe(9)
 
 # Apps the dashboard is allowed to launch, mapped to their macOS app names.
 LAUNCHABLE = {
@@ -222,7 +239,11 @@ def action_quality():
 
 
 def action_ping(host, count):
-    host = host or "1.1.1.1"
+    host = (host or "1.1.1.1").strip()
+    # Both callers pass a gateway IP or 1.1.1.1. Constrain it to hostname characters and
+    # reject a leading hyphen so the value can never be read as a ping flag.
+    if not re.match(r"^(?!-)[A-Za-z0-9._:-]{1,253}$", host):
+        return {"ok": False, "host": host, "error": "invalid host"}
     count = str(max(1, min(int(count or 5), 20)))
     rc, out, err = run(["ping", "-c", count, "-t", "10", host], 20)
     res = {"ok": rc == 0, "host": host}
@@ -253,23 +274,20 @@ def action_open(app_key):
     return {"ok": True, "app": name}
 
 
-def action_gateway(url):
-    """Best-effort proxy fetch of a gateway telemetry URL (avoids browser CORS).
-    Model/creds vary by T-Mobile gateway, so this just returns whatever it gets."""
-    if not url or not url.startswith("http"):
-        return {"ok": False, "error": "provide a full http:// URL"}
+def is_private_host(host):
+    """True if `host` is a literal IP on a private/loopback range.
+
+    Gateways live on the LAN, so a name or public address is always either a
+    mistake or an attempt to point this server somewhere it has no business
+    fetching (cloud metadata endpoints being the usual target).
+    """
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=8) as r:
-            body = r.read().decode("utf-8", "replace")
-            status = r.status
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "error": str(e)}
-    try:
-        parsed = json.loads(body)
+        addr = ipaddress.ip_address(host)
     except ValueError:
-        parsed = body[:4000]
-    return {"ok": True, "status": status, "body": parsed}
+        return False
+    # Link-local is deliberately NOT allowed: no home gateway self-assigns a 169.254 address,
+    # and that range is where cloud metadata services sit.
+    return (addr.is_private or addr.is_loopback) and not addr.is_link_local
 
 
 def action_cellular(ip, username, password):
@@ -277,6 +295,8 @@ def action_cellular(ip, username, password):
     Works across Sagemcom 5688W / Arcadyan KVD21 / Sercomm G4AR-G4SE."""
     ip = (ip or "192.168.12.1").strip()
     username = (username or "admin").strip()
+    if not is_private_host(ip):
+        return {"ok": False, "error": "gateway address must be a private LAN IP (e.g. 192.168.12.1)"}
     base = "http://%s" % ip
 
     # Newer firmware needs a bearer token; older/simpler setups answer unauthenticated.
@@ -372,6 +392,11 @@ def action_gps_push(params, body):
     acc = _num(src, "acc", "accuracy", "hdop")
     if lat is None or lon is None:
         return {"ok": False, "error": "no lat/lon in request"}
+    # The GPSLogger URL template is hand-typed by the technician, so a mistyped placeholder or
+    # an app sending microdegrees otherwise stores a "valid" fix that quietly puts readings in
+    # the wrong hemisphere — the GPS badge still reads fresh and nothing downstream notices.
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return {"ok": False, "error": "lat/lon out of range — check the URL template in your GPS app"}
     global _gps_fix
     with _gps_lock:
         _gps_fix = {"lat": lat, "lon": lon, "acc": acc,
@@ -392,8 +417,8 @@ def action_gps_config():
     ip = lan_ip()
     base = "http://%s:%d" % (ip, PORT)
     return {"ok": True, "lan_ip": ip, "port": PORT,
-            "gpslogger_url": base + "/api/gps?lat=%LAT&lon=%LON&acc=%ACC&time=%TIME",
-            "owntracks_url": base + "/api/gps"}
+            "gpslogger_url": base + "/api/gps?k=" + API_KEY + "&lat=%LAT&lon=%LON&acc=%ACC&time=%TIME",
+            "owntracks_url": base + "/api/gps?k=" + API_KEY}
 
 
 def _geocode_census(q):
@@ -531,6 +556,41 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quiet console
         pass
 
+    def _host_ok(self):
+        """Reject a Host header that isn't an address this server could legitimately be at.
+
+        A web page can make the browser send requests here, but it cannot forge the Host
+        header — so requiring an IP or localhost blocks the DNS-rebinding route, where an
+        attacker's domain is repointed at 127.0.0.1 to reach this API from their page.
+        """
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+        if host in ("localhost", "127.0.0.1", "::1", ""):
+            return True
+        try:
+            ipaddress.ip_address(host)
+            return True          # a bare IP can't be rebound
+        except ValueError:
+            return False
+
+    def _key_ok(self, query):
+        supplied = (query.get("k", [None])[0] or self.headers.get("X-Survey-Key") or "")
+        return hmac.compare_digest(supplied, API_KEY)
+
+    def _guard(self, path, query, need_json=False):
+        """Common checks for /api/*. Returns True when the request may proceed."""
+        if not self._host_ok():
+            self._send_json({"ok": False, "error": "bad Host header"}, 403)
+            return False
+        if need_json:
+            ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if ctype and ctype not in ("application/json", "text/plain"):
+                self._send_json({"ok": False, "error": "expected application/json"}, 415)
+                return False
+        if not self._key_ok(query):
+            self._send_json({"ok": False, "error": "missing or bad key — reload the dashboard"}, 403)
+            return False
+        return True
+
     def _send_json(self, obj, code=200):
         payload = json.dumps(obj).encode("utf-8")
         self.send_response(code)
@@ -554,6 +614,11 @@ class Handler(BaseHTTPRequestHandler):
         ctype = "text/html" if filename.endswith(".html") else "application/javascript"
         with open(path, "rb") as f:
             body = f.read()
+        # Hand the page this run's API key. Same-origin script can read it; a cross-origin
+        # page cannot read this response at all, which is what makes the key worth having.
+        if filename.endswith(".html"):
+            body = body.replace(b"<head>",
+                                b'<head>\n<meta name="survey-key" content="%s">' % API_KEY.encode(), 1)
         self.send_response(200)
         self.send_header("Content-Type", "%s; charset=utf-8" % ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -564,19 +629,38 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # Any uncaught handler error used to close the socket with no response at all, which the
+    # browser reports as a network failure — so a server bug looked like a Wi-Fi problem and
+    # sent the technician off checking the wrong thing.
     def do_GET(self):
+        try:
+            self._route_get()
+        except Exception as e:  # noqa: BLE001
+            self._send_json({"ok": False, "error": "server error: %s" % e}, 500)
+
+    def do_POST(self):
+        try:
+            self._route_post()
+        except Exception as e:  # noqa: BLE001
+            self._send_json({"ok": False, "error": "server error: %s" % e}, 500)
+
+    def _route_get(self):
         u = urlparse(self.path)
         q = parse_qs(u.query)
         if u.path in STATIC:
+            if not self._host_ok():
+                return self.send_error(403)
             return self._send_file(STATIC[u.path])
+        if not u.path.startswith("/api/"):
+            return self.send_error(404)
+        if not self._guard(u.path, q):
+            return
         if u.path == "/api/scan":
             return self._send_json(action_scan())
         if u.path == "/api/quality":
             return self._send_json(action_quality())
         if u.path == "/api/ping":
             return self._send_json(action_ping(q.get("host", [None])[0], q.get("count", [5])[0]))
-        if u.path == "/api/gateway":
-            return self._send_json(action_gateway(q.get("url", [None])[0]))
         if u.path == "/api/gps":  # phone app pushes a fix via query params (GPSLogger GET)
             return self._send_json(action_gps_push(q, {}))
         if u.path == "/api/gps/latest":
@@ -592,9 +676,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(502)
         self.send_error(404)
 
-    def do_POST(self):
+    def _route_post(self):
         u = urlparse(self.path)
-        length = int(self.headers.get("Content-Length", 0))
+        q = parse_qs(u.query)
+        if not u.path.startswith("/api/"):
+            return self.send_error(404)
+        if not self._guard(u.path, q, need_json=True):
+            return
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length > 1 << 20:            # a GPS fix is a few hundred bytes
+            return self._send_json({"ok": False, "error": "body too large"}, 413)
         raw = self.rfile.read(length) if length else b"{}"
         try:
             body = json.loads(raw or b"{}")
@@ -612,16 +703,22 @@ class Handler(BaseHTTPRequestHandler):
                     form = {k: v[0] for k, v in parse_qs(raw.decode("utf-8", "replace")).items()}
                 except Exception:  # noqa: BLE001
                     form = {}
-            action_gps_push(parse_qs(u.query), body or form)
+            action_gps_push(q, body or form)
             # OwnTracks HTTP mode expects a JSON array response (list of commands, usually empty)
             return self._send_json([])
         self.send_error(404)
 
 
 def main():
-    srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    try:
+        srv = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as e:
+        print("Couldn't start on port %d: %s" % (PORT, e))
+        print("It's probably already running — open http://localhost:%d" % PORT)
+        raise SystemExit(1)
     print("WiFi Survey mission-control:  http://localhost:%d" % PORT)
-    print("Phone GPS bridge — point your phone's GPS app at:  http://%s:%d/api/gps" % (lan_ip(), PORT))
+    print("On your phone (same Wi-Fi):   http://%s:%d" % (lan_ip(), PORT))
+    print("Phone GPS bridge — the exact URL to paste is on the GPS page.")
     print("Press Ctrl+C to stop.")
     try:
         srv.serve_forever()

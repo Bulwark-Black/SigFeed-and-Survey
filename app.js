@@ -200,7 +200,7 @@ async function runSpeedTest() {
   $("speedBig").textContent = "…";
   ["stDown", "stUp", "stLat", "stRpm"].forEach((i) => { if ($(i)) $(i).textContent = "…"; });
   try {
-    const d = await (await fetch("/api/quality")).json();
+    const d = await api("/api/quality");
     if (d.ok) {
       const dl = d.download_mbps;
       speedMax = niceMax(dl != null ? dl : 0);
@@ -250,6 +250,28 @@ function store(key, value) {
   catch (e) { warn("Storage full — that didn't save. Export the survey now to avoid losing it."); return false; }
 }
 
+/* ---------- backend calls ---------- */
+// The server injects this run's key into the page it serves; a cross-origin page can't read
+// that response, so it can't call the API on the technician's behalf.
+const API_KEY = (document.querySelector('meta[name="survey-key"]') || {}).content || "";
+
+function apiUrl(path) {
+  if (!API_KEY) return path;
+  return path + (path.indexOf("?") >= 0 ? "&" : "?") + "k=" + encodeURIComponent(API_KEY);
+}
+
+// One place for every backend call. Nothing used to check response.ok, so a 500 from the
+// server surfaced as "Speed test failed" and sent the tech looking at the Wi-Fi instead.
+async function api(path, opts) {
+  const r = await fetch(apiUrl(path), opts);
+  if (!r.ok) {
+    let detail = r.status === 403 ? "the dashboard needs reloading" : "server error " + r.status;
+    try { const j = await r.json(); if (j && j.error) detail = j.error; } catch (e) {}
+    throw new Error(detail);
+  }
+  return r.json();
+}
+
 /* ---------- mode ---------- */
 function showPage(name) {
   document.querySelectorAll(".page").forEach((p) => p.classList.add("hidden"));
@@ -276,7 +298,7 @@ function showPage(name) {
 /* ---------- live poll ---------- */
 async function poll() {
   try {
-    const d = await (await fetch("/api/scan")).json();
+    const d = await api("/api/scan");
     if (!d.ok) throw new Error();
     lastScan = d;
     const c = d.current;
@@ -371,11 +393,11 @@ function renderNearby(list, current) {
 
 async function launch(app) {
   try {
-    const d = await (await fetch("/api/open", {
+    const d = await api("/api/open", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ app }),
-    })).json();
+    });
     if (!d.ok) toast("Couldn't open " + app + " — is it installed?");
   } catch (e) {
     toast("Launch failed");
@@ -435,10 +457,10 @@ async function captureAdv() {
   if ($("capThroughput").checked) {
     toast("Measuring throughput…");
     try {
-      const q = await (await fetch("/api/quality")).json();
+      const q = await api("/api/quality");
       if (q.ok) { extras.download_mbps = q.download_mbps; extras.upload_mbps = q.upload_mbps; extras.responsiveness_rpm = q.responsiveness_rpm; }
       const host = (lastScan && lastScan.default_gateway) || "1.1.1.1";
-      const p = await (await fetch("/api/ping?host=" + encodeURIComponent(host) + "&count=5")).json();
+      const p = await api("/api/ping?host=" + encodeURIComponent(host) + "&count=5");
       if (p.ok) { extras.ping_avg_ms = p.avg_ms; extras.ping_loss_pct = p.loss_pct; }
     } catch (e) {}
   }
@@ -620,7 +642,7 @@ async function runQuality() {
   b.disabled = true;
   b.innerHTML = '<span class="spin"></span> testing…';
   try {
-    const d = await (await fetch("/api/quality")).json();
+    const d = await api("/api/quality");
     if (d.ok) {
       $("qDown").textContent = (d.download_mbps ?? "—") + " Mbps";
       $("qUp").textContent = (d.upload_mbps ?? "—") + " Mbps";
@@ -642,7 +664,7 @@ async function runCellSpeed() {
   $("csUp").textContent = "…";
   $("csLat").textContent = "…";
   try {
-    const d = await (await fetch("/api/quality")).json();
+    const d = await api("/api/quality");
     if (d.ok) {
       $("csDown").textContent = (d.download_mbps ?? "—") + " Mbps";
       $("csUp").textContent = (d.upload_mbps ?? "—") + " Mbps";
@@ -665,7 +687,7 @@ async function runPing() {
   b.disabled = true;
   b.innerHTML = '<span class="spin"></span> ping…';
   try {
-    const d = await (await fetch("/api/ping?host=" + encodeURIComponent(host) + "&count=5")).json();
+    const d = await api("/api/ping?host=" + encodeURIComponent(host) + "&count=5");
     $("pLat").textContent = d.ok ? `${d.avg_ms} ms · ${d.loss_pct}% loss` : "unreachable";
     toast(d.ok ? `Ping ${host}: ${d.avg_ms} ms` : "Ping failed");
   } catch (e) { toast("Ping failed"); }
@@ -684,11 +706,11 @@ async function connectCell() {
   // only show the "Connecting…" state on a manual connect, not on every auto-refresh tick
   if (!cellTimer) setCellBadge("wait", "📡", "Connecting to gateway…", "Reading signal from the gateway…");
   try {
-    const d = await (await fetch("/api/cellular", {
+    const d = await api("/api/cellular", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ip, password: pass }),
-    })).json();
+    });
     if (!d.ok) {
       setCellBadge("stale", "⚠️", d.error || "Couldn't read the gateway.", "Check the address and admin password, and that you're on the gateway's Wi-Fi.");
       $("cellResults").classList.add("hidden");
@@ -1667,7 +1689,7 @@ async function buildAerial() {
   const oldTxt = btn ? btn.innerHTML : "";
   if (btn) { btn.disabled = true; btn.textContent = "Finding…"; }
   try {
-    const d = await (await fetch("/api/geocode?q=" + encodeURIComponent(q))).json();
+    const d = await api("/api/geocode?q=" + encodeURIComponent(q));
     if (!d || !d.ok || d.lat == null || d.lon == null) {
       toast("Couldn't find that address — check spelling and include city, state & ZIP.");
       return;
@@ -1695,7 +1717,7 @@ function loadTile(z, x, y) {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => resolve(null);
-    img.src = "/api/tile?z=" + z + "&x=" + x + "&y=" + y;
+    img.src = apiUrl("/api/tile?z=" + z + "&x=" + x + "&y=" + y);
   });
 }
 
@@ -2742,7 +2764,7 @@ function setGpsBadge(state, main, sub) {
 
 async function loadGpsConfig() {
   try {
-    const d = await (await fetch("/api/gps/config")).json();
+    const d = await api("/api/gps/config");
     if (d.ok) {
       if ($("gpsUrl")) $("gpsUrl").textContent = d.gpslogger_url;      // Android / GPSLogger
       if ($("gpsUrlBase")) $("gpsUrlBase").textContent = d.owntracks_url; // iPhone / OwnTracks
@@ -2753,7 +2775,7 @@ async function loadGpsConfig() {
 // One fetch of the latest fix; updates lastGpsFix + the badge. Returns the fix or null.
 async function refreshGps() {
   try {
-    const d = await (await fetch("/api/gps/latest")).json();
+    const d = await api("/api/gps/latest");
     if (d.ok && d.fix) {
       lastGpsFix = d.fix;
       const acc = d.fix.acc != null ? "±" + Math.round(d.fix.acc) + " m" : "accuracy unknown";
