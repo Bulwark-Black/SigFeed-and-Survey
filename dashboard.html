@@ -81,11 +81,6 @@
     #profName{max-width:150px;padding:8px 12px}
     #profMenu{min-width:220px;max-width:78vw}
   }
-  .modes{margin-left:auto;display:flex;gap:4px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-pill);padding:4px}
-  .modes button{border:0;background:transparent;color:var(--muted);border-radius:var(--r-pill);
-    padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer;transition:all var(--dur-1) var(--ease-out)}
-  .modes button:hover{color:var(--ink)}
-  .modes button.on{background:var(--accent);color:var(--ink-on-accent);box-shadow:var(--e-1)}
   main{max-width:760px;margin:0 auto;padding:20px}
   .adv-wrap{max-width:1180px}
   .card{background:var(--surface-1);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;margin-bottom:22px;box-shadow:var(--e-2)}
@@ -154,14 +149,6 @@
   .sumstrip .val{display:flex;align-items:center;gap:7px;margin-top:5px;font-size:19px;font-weight:800;font-family:var(--font-num);color:var(--ink-strong);white-space:nowrap}
   .sumstrip .cdot{width:9px;height:9px;border-radius:50%;background:var(--na);flex:none}
   .sumstrip .csub{font-size:11px;color:var(--faint);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
-  .whatsnew{display:flex;align-items:center;gap:14px;margin:0 0 18px;padding:12px 16px;border-radius:var(--r-md);
-    background:linear-gradient(100deg,var(--accent-soft),rgba(245,177,63,.06));border:1px solid var(--accent-line);box-shadow:var(--e-2)}
-  .whatsnew.hidden{display:none}
-  .whatsnew .wn-tag{flex:none;font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--ink-on-accent);background:var(--accent);border-radius:var(--r-pill);padding:3px 10px}
-  .whatsnew .wn-text{font-size:13.5px;color:var(--ink);line-height:1.45}
-  .whatsnew .wn-text b{color:var(--ink-strong)}
-  .whatsnew .wn-x{flex:none;margin-left:auto;background:transparent;border:none;color:var(--faint);font-size:16px;cursor:pointer;padding:4px 6px;border-radius:var(--r-xs)}
-  .whatsnew .wn-x:hover{color:var(--ink);background:var(--surface-3)}
 
   /* ---------- shell polish ---------- */
   .brand{display:flex;align-items:center;gap:11px;padding:2px 10px 14px;margin-bottom:4px;border-bottom:1px solid var(--line-soft)}
@@ -220,15 +207,12 @@
   @media(max-width:820px){#summaryStrip{grid-template-columns:repeat(2,1fr)}.mc-cols{grid-template-columns:1fr}.mc-actions{grid-template-columns:repeat(2,1fr)}.mc-hero{flex-direction:column;text-align:center}.mc-hero-actions{justify-content:center}}
   /* ---------- EASY MODE ---------- */
   .hero{text-align:center;padding:26px 20px}
-  .hero-icon{font-size:46px}
-  .hero-title{font-size:26px;font-weight:750;margin:6px 0 18px}
   .big-btn{display:inline-flex;align-items:center;justify-content:center;gap:12px;cursor:pointer;
     border:0;border-radius:16px;font-weight:750;transition:.12s;font-family:inherit}
   .hero-btn{background:var(--accent-grad);color:var(--ink-on-accent);font-size:24px;padding:20px 40px;width:100%;max-width:460px;
     box-shadow:var(--accent-glow);transition:all var(--dur-2) var(--ease-out)}
   .hero-btn:hover{filter:brightness(1.06);transform:translateY(-1px)}
   .hero-btn.done{background:var(--surface-3);color:var(--muted);box-shadow:none}
-  .hero-sub{color:var(--muted);font-size:15px;margin-top:14px}
   .statusband{display:flex;align-items:center;gap:14px;font-size:20px;font-weight:700;padding:18px 22px;
     border-radius:14px;border:2px solid var(--line)}
   .statusband.ok{border-color:var(--exc);background:rgba(34,197,94,.08)}
@@ -242,8 +226,6 @@
   #gaugeDbm{font-size:31px;font-weight:800;margin:3px 0}
   #gaugeNet{font-size:16px;font-weight:600;color:var(--muted)}
   /* coverage map */
-  .addplan-btn{background:var(--panel2);color:var(--ink);border:2px dashed var(--line);font-size:18px;padding:26px;width:100%}
-  .addplan-btn:hover{border-color:var(--accent)}
   #mapWrap{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);cursor:crosshair;line-height:0}
   #mapHint.hint-active{background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:10px;padding:11px 14px;color:var(--ink)}
   #planImg{width:100%;display:block}
@@ -322,7 +304,6 @@
   .mode-survey .pvtx,.mode-survey .pmid{display:none}
   .room .rdel{position:absolute;top:0;right:4px;color:#dbe6ff;font-size:16px;cursor:pointer;line-height:1.2;padding:2px}
   .room .redit{position:absolute;top:2px;left:4px;color:#dbe6ff;font-size:13px;cursor:pointer;line-height:1.2;padding:2px}
-  .mode-survey .room .rhandle,.mode-survey .room .rdel,.mode-survey .room .redit{display:none}
   .proomlabel{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:3px;
     text-align:center;color:#e8f0ff;font-size:13px;font-weight:650;user-select:none;pointer-events:none;white-space:nowrap}
   .proomlabel .rname{line-height:1.2;text-shadow:0 1px 3px rgba(8,12,22,.85)}

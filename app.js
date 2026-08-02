@@ -4,15 +4,11 @@
 const $ = (id) => document.getElementById(id);
 const LS_POINTS = "wifisurvey.points";
 const LS_SITE = "wifisurvey.site";
-const LS_MODE = "wifisurvey.mode";
 const LS_PAGE = "wifisurvey.page";
 const LS_CELL = "wifisurvey.cell";
 const LS_CELLPTS = "wifisurvey.cellpoints";
 const LS_HEATMAP = "wifisurvey.heatmap";
 const LS_PHOTOS = "wifisurvey.photos";
-const LS_PLAN = "wifisurvey.plan";
-const LS_ROOMS = "wifisurvey.rooms";
-const LS_PLANMODE = "wifisurvey.planmode";
 const LS_LEVELS = "wifisurvey.levels";
 const LS_ACTIVELEVEL = "wifisurvey.activelevel";
 const LS_PROFILES = "wifisurvey.profiles";            // JSON [{id,name,updated}] — the profile registry
@@ -354,17 +350,6 @@ function renderNearby(list, current) {
         <span class="muted">ch ${n.channel ?? "?"} · ${n.band || "?"} · ${sig}</span></li>`;
     })
     .join("");
-}
-
-/* ---------- start survey (the one button) ---------- */
-async function startSurvey() {
-  const b = $("btnStart");
-  b.innerHTML = '<span class="spin"></span>&nbsp; Opening your tools…';
-  await launch("netspot");
-  await launch("wifi-explorer");
-  b.classList.add("done");
-  b.innerHTML = "✓ Tools open — walk around &amp; save each room";
-  toast("NetSpot & WiFi Explorer opened — read the dial below");
 }
 
 async function launch(app) {
@@ -1238,8 +1223,6 @@ function getScale() {
   }
   return null;
 }
-// distance in feet between two [0,1]-fraction points under the active scale (null if uncalibrated)
-function distFt(ax, ay, bx, by) { const s = getScale(); return s ? Math.hypot((bx - ax) * s.ftW, (by - ay) * s.ftH) : null; }
 // |shoelace| area of a [0,1]-fraction polygon (fraction of the whole image, 0..1)
 function polyFracArea(poly) {
   if (!poly || poly.length < 3) return 0;
@@ -3206,15 +3189,6 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-function detectCoChannel(pts) {
-  if (!lastScan || !lastScan.nearby || !lastScan.current) return null;
-  const ch = lastScan.current.channel;
-  const clash = lastScan.nearby.filter((n) => n.channel === ch && n.ssid !== lastScan.current.ssid);
-  if (clash.length >= 2)
-    return `Channel ${ch} is congested — ${clash.length} neighboring networks share it. Consider changing the gateway's Wi-Fi channel (or enabling auto) to reduce interference.`;
-  return null;
-}
-
 function healthBadge(ins, size) {
   return `<div class="hbadge" style="--bc:${ins.gradeColor};width:${size}px;height:${size}px">
     <div class="hnum">${ins.score}</div><div class="hgrade">${ins.grade}</div></div>`;
@@ -4048,10 +4022,7 @@ function renderReportInsights() {
     <div style="font-size:14px;line-height:1.5">${ins.summary}</div></div>${cards}`;
 }
 
-function dismissWhatsNew() { const b = $("whatsNew"); if (b) b.classList.add("hidden"); try { localStorage.setItem("wifi_whatsnew_v2", "1"); } catch (e) {} }
-
 /* ---------- boot ---------- */
-if (localStorage.getItem("wifi_whatsnew_v2")) { const _wn = $("whatsNew"); if (_wn) _wn.classList.add("hidden"); }
 buildZones();
 buildSpeedZones();            // Live-page speed dial: colored zones…
 buildSpeedTicks(speedMax);    // …initial 0 / max/2 / max tick labels (default 500)…
