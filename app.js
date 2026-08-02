@@ -64,7 +64,8 @@ function emptySitePlan() { return { yard: [], house: [], houseT: { tx: 0, ty: 0,
 let sitePlan = emptySitePlan();       // Site Plan page: GPS-walked yard + hand-drawn house placed inside
 let siteMode = "yard";                // yard | house | place
 let siteDrag = null;                  // in-progress house drag
-function saveSitePlan() { try { localStorage.setItem(LS_SITEPLAN, JSON.stringify(sitePlan)); } catch (e) {} }
+// a GPS-walked yard boundary is an hour on foot — a failed write here has to be visible
+function saveSitePlan() { return store(LS_SITEPLAN, JSON.stringify(sitePlan)); }
 let surveyType = "all";  // 'inhouse'|'around'|'property'|'all' — WHAT is being surveyed (mirrors curLevel().surveyType; default 'all' = show everything = back-compat)
 let profiles = [];        // [{id,name,updated}] registry — mirrors LS_PROFILES
 let activeProfile = null; // id of the currently-loaded profile — its live data is in the working keys
@@ -3853,7 +3854,7 @@ function ingestFile(ev) {
       try { scan = parsePcap(rb.result); } catch (e) { scan = []; }
       if (scan.length) {
         importedScan = scan;
-        try { localStorage.setItem("wifisurvey.importedscan", JSON.stringify(scan)); } catch (e) {}
+        store(LS_IMPORTEDSCAN, JSON.stringify(scan));
         renderReportInsights();
         if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> network${scan.length > 1 ? "s" : ""} from the packet capture — channel, signal &amp; security now feed the report's RF analysis.`;
       } else if (st) {
@@ -3872,7 +3873,7 @@ function ingestFile(ev) {
     if (!scan.length && (name.endsWith(".wifiexplorer") || name.endsWith(".plist") || text.indexOf("<plist") >= 0)) scan = parseWifiExplorerPlist(text);
     if (scan.length) {
       importedScan = scan;
-      try { localStorage.setItem("wifisurvey.importedscan", JSON.stringify(scan)); } catch (e) {}
+      store(LS_IMPORTEDSCAN, JSON.stringify(scan));
       renderReportInsights();
       if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> networks from WiFi&nbsp;Explorer — they now feed the report's interference / RF analysis (channel, width, security, vendor).`;
     } else if (st && text.indexOf("<plist") >= 0) {
