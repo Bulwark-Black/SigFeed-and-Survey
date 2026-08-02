@@ -41,6 +41,7 @@ let heatPreset = "video";    // web | video | iot
 let reqProfile = "none";      // active requirement profile → drives live % area passing + fail grey-out
 let planMode = null;   // 'image' | 'schematic' | null
 let mapMode = "edit";  // 'edit' (arrange rooms) | 'survey' (tap readings) | 'roomshape' (draw polygon room)
+let placingId = null;  // id of an already-saved reading waiting to be tapped onto the map
 let rooms = [];        // rect rooms {id,name,x,y,w,h} or polygon rooms {id,name,poly:[{x,y}]}
 let shapeVerts = [];   // in-progress polygon vertices while drawing a shape room
 let perimeter = [];    // [{x,y}] relative property-boundary vertices for the active level
@@ -244,6 +245,34 @@ function toast(msg, kind) {
 // Something went wrong that costs the user data or work. Never silent.
 function warn(msg) { toast(msg, "warn"); }
 
+// Browsers give a page roughly 5MB of localStorage, and this survey lives entirely in it:
+// site photos, floor plans, composed aerials and a per-level heatmap snapshot are all base64
+// JPEGs, which inflate about a third over the raw bytes. Three floors with aerials will reach
+// the ceiling on a normal job. store() shouts when a write has already failed; this is so the
+// surveyor can see it coming and export while everything still fits.
+const STORAGE_BUDGET = 5 * 1024 * 1024;
+function storageBytes() {
+  let n = 0;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); n += k.length + (localStorage.getItem(k) || "").length; } }
+  catch (e) { return 0; }
+  return n * 2;    // UTF-16 code units
+}
+function fmtBytes(n) { return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB"; }
+
+let storageWarned = false;
+function renderStorageBar() {
+  const el = $("storageBar");
+  if (!el) return;
+  const used = storageBytes(), pct = Math.min(100, Math.round((used / STORAGE_BUDGET) * 100));
+  const level = pct >= 85 ? "full" : pct >= 65 ? "warn" : "";
+  el.className = "storagebar" + (level ? " " + level : "");
+  el.innerHTML = `<span>Browser storage</span><span class="track"><span class="fill" style="width:${pct}%"></span></span>` +
+    `<span>${fmtBytes(used)} of ~${fmtBytes(STORAGE_BUDGET)}${pct >= 65 ? " — save the survey file now; photos and floor plans are what fill this" : ""}</span>`;
+  // one nudge per session, at the point where there's still room to act
+  if (pct >= 85 && !storageWarned) { storageWarned = true; warn("Browser storage is nearly full — save the survey file before adding more photos."); }
+  if (pct < 65) storageWarned = false;
+}
+
 // Every localStorage write goes through here. A write that fails must be loud:
 // out in the field a silent quota error looks exactly like "the save button stopped working".
 function store(key, value) {
@@ -290,7 +319,7 @@ function showPage(name) {
   if (name === "map") renderCoverageMap(); // canvas must size after the page becomes visible
   if (name === "siteplan") setSiteMode(siteMode); // sizes the canvas + restores mode UI
   if (name === "guide") renderGuide();
-  if (name === "report") renderReportInsights();
+  if (name === "report") { renderReportInsights(); renderStorageBar(); }
   // the gateway poll is a cellular-page affordance; it used to keep hammering the gateway
   // for the rest of the session once started
   if (name !== "cellular") stopCellAuto();
@@ -482,9 +511,38 @@ async function captureAdv() {
   toast(`Captured “${loc}”`);
 }
 
+// Start (or cancel) placing an already-saved reading onto the map.
+function startPlacing(id) {
+  placingId = placingId === id ? null : id;
+  if (placingId != null) {
+    const p = points.find((q) => q.id === placingId);
+    if (mapMode === "edit") setMapMode("survey");
+    toast(p ? `Tap the map where you took “${p.location}”` : "Tap the map to place it");
+    const wrap = $("mapWrap");
+    if (wrap && wrap.scrollIntoView) wrap.scrollIntoView({ block: "center" });
+  }
+  renderPoints();
+  renderUnplacedBar();
+}
+
+// Standing warning on the Coverage page while any reading is missing a position.
+function renderUnplacedBar() {
+  const el = $("unplacedBar");
+  if (!el) return;
+  const n = unplacedPoints().length;
+  if (!n) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  const first = unplacedPoints()[0];
+  el.innerHTML = `<div><b>${n} reading${n > 1 ? "s aren't" : " isn't"} on the map.</b>
+      ${n > 1 ? "They're" : "It's"} in the list and the CSV, but the heatmap, surveyed area,
+      % passing and dead-zone figures can't use ${n > 1 ? "them" : "it"}.</div>
+    <button class="ghost" onclick="startPlacing(${first.id})">${placingId != null ? "Tap the map…" : "Place " + esc(first.location)}</button>`;
+}
+
 function renderPoints() {
   $("easyCount").textContent = points.length;
   if ($("ptCount")) $("ptCount").textContent = points.length;
+  renderUnplacedBar();
   renderSummary();
   renderReportInsights();
   const es = $("easySpots");
@@ -494,8 +552,11 @@ function renderPoints() {
     es.innerHTML = points
       .map((p) => {
         const r = rate(p.signal, p.snr);
+        const off = p.mapX == null
+          ? `<button class="placebtn${placingId === p.id ? " on" : ""}" onclick="startPlacing(${p.id})" title="This reading has no position, so it's missing from the heatmap and every area figure. Tap here, then tap the map.">not on map</button>`
+          : "";
         return `<div class="spot"><span class="dot" style="background:${r.color}"></span>
-          <span class="nm">${esc(p.location)}</span>
+          <span class="nm">${esc(p.location)}</span>${off}
           <span class="rt" style="color:${r.color}">${r.word}</span>
           <span class="muted" style="font-size:14px">${p.signal ?? "—"} dBm</span>
           <button class="x" onclick="delPoint(${p.id})">✕</button></div>`;
@@ -1053,7 +1114,9 @@ function setPhotoCaption(idx, val) {
   if (reportPhotos[idx]) { reportPhotos[idx].caption = val; savePhotos(); }
 }
 
+// photos are the bulkiest thing in storage, so keep the meter honest right after adding one
 function renderReportPhotos() {
+  renderStorageBar();
   const el = $("reportPhotoStrip");
   if (!el) return;
   if (!reportPhotos.length) { el.innerHTML = ""; return; }
@@ -1130,6 +1193,12 @@ function mappedPoints(pts, level) {
   const lv = level || activeLevel;
   return (pts || []).filter((p) => p.mapX != null && p.level === lv);
 }
+// Readings saved from the Live page or the ✓ SAVE button carry no map position. They show up
+// in the list, the table and the CSV, but every spatial figure — heatmap, surveyed area,
+// % passing, dead-zone footage, the map image in the PDF — skips them. Left unflagged, a
+// technician can walk an entire property the fast way and only discover at report time that
+// there is no map. This is what makes them visible and repairable.
+function unplacedPoints() { return points.filter((p) => p.mapX == null); }
 
 // Readings with no map position carry x/y of NaN and would poison every cell they touch,
 // so they are dropped here rather than silently turning the whole grid into NaN.
@@ -1931,9 +2000,12 @@ function setFloorPlan(url) {
 function onMapTap(ev) {
   if (planMode !== "image" && planMode !== "schematic") return;
   const rect = $("mapWrap").getBoundingClientRect();
+  if (!(rect.width > 0) || !(rect.height > 0)) return;   // not laid out yet — a tap here would divide by zero
   const x = (ev.clientX - rect.left) / rect.width;
   const y = (ev.clientY - rect.top) / rect.height;
-  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  // NaN fails every comparison, so a bare range check lets it through — and a NaN coordinate
+  // poisons every interpolation cell it touches downstream.
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return;
   if (mapMode === "cal") {
     if (!calTemp.a || calTemp.b) { calTemp = { a: { x, y }, b: null }; setCalStep("Now tap the other end of that same distance."); }
     else { calTemp.b = { x, y }; setCalStep("done"); }
@@ -1967,6 +2039,22 @@ function onMapTap(ev) {
     return;
   }
   if (mapMode === "edit") return; // in edit mode, taps are for arranging rooms, not placing readings
+  // Placing a reading that was saved without a map position — this tap moves the existing
+  // reading onto the map rather than measuring a new one.
+  if (placingId != null) {
+    const p = points.find((q) => q.id === placingId);
+    if (p) {
+      p.mapX = x; p.mapY = y; p.level = activeLevel;
+      savePoints();
+      const left = unplacedPoints().length;
+      toast(left ? `Placed “${p.location}” — ${left} still to place` : `Placed “${p.location}” — that's all of them`);
+      placingId = left ? unplacedPoints()[0].id : null;
+      renderPoints();
+      renderCoverageMap();
+      return;
+    }
+    placingId = null;
+  }
   if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
   const label = $("easyRoom").value.trim() || "Point " + (mappedPoints(points).length + 1);
   if (!addPoint(label, lastScan.current, { mapX: x, mapY: y })) return;
@@ -3448,6 +3536,16 @@ function computeInsights(pts, site, env) {
 
 function genReport() {
   if (!points.length) return toast("Save at least one room first");
+  // Last chance to catch a survey walked entirely with ✓ SAVE: the readings are all there but
+  // none of them has a position, so the report would come out with no map and no area figures.
+  const off = unplacedPoints().length;
+  if (off && !confirm(
+    `${off} of your ${points.length} readings ${off > 1 ? "aren't" : "isn't"} on the map.\n\n` +
+    `${off === points.length
+      ? "The report will have no heatmap, no surveyed area and no % passing."
+      : `${off > 1 ? "They won't" : "It won't"} appear on the heatmap or count toward the area figures.`}\n\n` +
+    `On the Coverage page you can tap ${off > 1 ? "each one" : "it"} onto the map. Make the report anyway?`
+  )) { showPage("map"); return; }
   saveLevelMap();
   if ($("f_client") && !$("f_client").value.trim()) {
     const name = prompt("Client or site name for the report? (optional)");

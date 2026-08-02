@@ -161,6 +161,22 @@
     .navitem{width:auto;white-space:nowrap;padding:9px 13px}
     #content{max-width:none;padding:16px}
   }
+  /* browser-storage meter — the survey lives in localStorage, which is finite */
+  .storagebar{margin-top:14px;font-size:12.5px;color:var(--faint);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .storagebar .track{flex:1;min-width:140px;max-width:280px;height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden}
+  .storagebar .fill{height:100%;background:var(--exc);border-radius:3px;transition:width var(--dur-2) var(--ease-out)}
+  .storagebar.warn{color:var(--fair)} .storagebar.warn .fill{background:var(--fair)}
+  .storagebar.full{color:var(--poor)} .storagebar.full .fill{background:var(--poor)}
+  /* readings saved without a map position — visible until they're placed or deleted */
+  .unplaced{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 16px;padding:12px 15px;
+    border-radius:var(--r-md);background:var(--fair-soft);border:1px solid var(--fair-line);
+    font-size:13.5px;line-height:1.45;color:var(--ink)}
+  .unplaced.hidden{display:none}
+  .unplaced button{flex:none;margin-left:auto;min-height:40px}
+  .placebtn{border:1px solid var(--fair-line);background:var(--fair-soft);color:var(--fair);
+    border-radius:var(--r-pill);padding:3px 10px;font:700 11px/1.4 var(--font-sans);cursor:pointer;
+    white-space:nowrap;flex:none}
+  .placebtn:hover,.placebtn.on{background:var(--fair);color:var(--ink-on-status)}
   /* smart summary strip */
   .sumstrip{display:flex;gap:14px;overflow-x:auto;padding-bottom:22px;margin-bottom:4px}
   .sumstrip .chip{flex:1;min-width:122px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;box-shadow:var(--e-2)}
@@ -720,12 +736,15 @@
              onkeydown="if(event.key==='Enter')saveEasy()">
       <button class="big-btn save-btn" onclick="saveEasy()">✓ SAVE</button>
     </div>
-    <div class="hint muted" style="margin-top:10px;font-size:14px">Stand in the middle of the room, wait a second for the dial to settle, then tap SAVE — or drop it on the map below.</div>
+    <div class="hint muted" style="margin-top:10px;font-size:14px">Stand in the middle of the room and wait a second for the dial to settle.
+      <b>Tapping the map below is the one that counts</b> — that records where you were standing, which is what the heatmap,
+      the area figures and the client's map are built from. <b>✓ SAVE</b> logs the reading to the list only.</div>
   </div>
 
   <!-- COVERAGE MAP -->
   <div class="card">
     <h2>Coverage Map — tap where you are</h2>
+    <div id="unplacedBar" class="unplaced hidden"></div>
     <div id="levelTabs" class="leveltabs"></div>
     <div style="margin-bottom:16px">
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px">Home size — total sq ft (optional, used for room estimates)</label>
@@ -977,6 +996,7 @@
       <button class="ghost" onclick="exportKML()" title="Points + boundary for Google Earth Pro / Google Maps">🌍 Google Earth (.kml)</button>
       <button class="ghost" onclick="window.open('/run-sheet.html','_blank')" title="Printable on-site field checklist">🖨 Field run sheet</button>
     </div>
+    <div id="storageBar" class="storagebar"></div>
     <div class="rowcap">Load / reset</div>
     <div class="subrow">
       <button class="ghost" onclick="document.getElementById('importFile').click()">⬆︎ Open survey file</button>
