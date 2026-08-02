@@ -15,6 +15,7 @@ const LS_PROFILES = "wifisurvey.profiles";            // JSON [{id,name,updated}
 const LS_ACTIVEPROFILE = "wifisurvey.activeprofile";  // id of the active profile
 const LS_IMPORTEDSCAN = "wifisurvey.importedscan";    // (existing literal key, now named)
 const LS_SITEPLAN = "wifisurvey.siteplan";            // { yard:[{x,y,lat?,lon?}], house:[{x,y}], houseT:{tx,ty,rot,scale} }
+const LS_SURVEYENV = "wifisurvey.surveyenv";          // { current, nearby, ts } RF environment at survey time
 const PROFILE_PREFIX = "wifisurvey.profile.";         // per-profile bundle key = PROFILE_PREFIX + id
 const SITE_FIELDS = ["f_client", "f_address", "f_tech", "f_gw", "f_plan", "f_ssid", "f_sqft"];
 
@@ -25,6 +26,10 @@ let lastCell = null;
 let cellTimer = null;
 let heatmapDataUrl = null;
 let importedScan = [];   // external Wi-Fi scan (WiFi Explorer / NetSpot CSV) for the report's RF analysis
+// {current, nearby, ts} — the RF environment as it was WHEN THE SURVEY WAS WALKED, captured on
+// the first reading. The report reads this, not lastScan, so reopening a survey somewhere else
+// later can't rewrite the client's interference and security findings from a different network.
+let surveyEnv = null;
 let reportPhotos = [];   // [{url,caption}] site photos/screenshots embedded in the report
 let floorPlanUrl = null;
 let floorPlanImg = null;
@@ -378,6 +383,19 @@ async function launch(app) {
 }
 
 /* ---------- capture ---------- */
+// Record the RF environment once, on the first reading of a survey — that is the moment the
+// tech is standing in the client's building on the client's network. Later readings don't
+// overwrite it: the first one is the honest answer to "what was the air like during the survey".
+function captureSurveyEnv() {
+  if (surveyEnv || !lastScan || !lastScan.current) return;
+  surveyEnv = {
+    current: lastScan.current,
+    nearby: lastScan.nearby || [],
+    ts: new Date().toISOString(),
+  };
+  store(LS_SURVEYENV, JSON.stringify(surveyEnv));
+}
+
 function addPoint(loc, c, extras) {
   const pt = {
     id: Date.now(), location: loc, ts: new Date().toISOString(), level: activeLevel,
@@ -394,6 +412,7 @@ function addPoint(loc, c, extras) {
   // If the write failed the reading only exists in memory — it will not survive a reload.
   // store() has already warned; roll it back so the list can't show a reading that isn't saved.
   if (!savePoints()) { points.pop(); return null; }
+  captureSurveyEnv();
   renderPoints();
   return pt;
 }
@@ -486,7 +505,7 @@ function renderSummary() {
     $("sumDead").textContent = dead;
     $("sumDead").style.color = dead ? "var(--poor)" : "var(--exc)";
     $("sumDeadDot").style.background = dead ? "var(--poor)" : "var(--exc)";
-    const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+    const mapped = mappedPoints(points);
     const hole = dead ? holeAreaSqft(-75, mapped) : 0;
     if ($("sumDeadSub")) $("sumDeadSub").textContent = hole ? "≈ " + fmtSqft(hole) : "";
   } else {
@@ -499,7 +518,7 @@ function renderSummary() {
   }
   // % Passing (requirement profile) — surfaces the requirement-target feature
   if ($("sumPass")) {
-    const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+    const mapped = mappedPoints(points);
     if (reqProfile === "none") {
       $("sumPass").textContent = "—"; $("sumPass").style.color = "var(--faint)";
       $("sumPassDot").style.background = "var(--na)";
@@ -520,7 +539,7 @@ function renderSummary() {
   }
   // Area (scale) — surfaces the calibration feature
   if ($("sumArea")) {
-    const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+    const mapped = mappedPoints(points);
     const area = surveyedSqft(mapped), sc = getScale();
     if (area) {
       $("sumArea").textContent = fmtSqft(area); $("sumArea").style.color = "var(--ink)";
@@ -579,6 +598,8 @@ function clearAll() {
   cellPoints = [];
   reportPhotos = [];
   importedScan = [];
+  surveyEnv = null;                    // the next walk records its own environment
+  try { localStorage.removeItem(LS_SURVEYENV); } catch (e) {}
   levels.forEach((l) => (l.snapshot = null));
   savePoints();
   saveCellPoints();
@@ -1016,22 +1037,51 @@ function pointColor(p) {
   return rgb ? `rgb(${rgb[0]},${rgb[1]},${rgb[2]})` : "#7c8aa6";
 }
 // inverse-distance-weighted color field with Gaussian alpha falloff around measured points
+// Distances for the interpolation below are measured in fractions of the map's WIDTH (the
+// vertical axis scaled by the map's true aspect) rather than in grid cells. That makes the
+// field identical whatever resolution a caller picks. Measured in cells, the epsilon that stops
+// a reading dividing by zero was one CELL, so its real size changed with the grid — the 100-,
+// 120-, 200- and 220-wide grids in this file each produced a slightly different field, which is
+// how the printed "% area passing" ended up disagreeing with the wash drawn right next to it.
+const IDW_EPS = 1e-4;      // ~1% of the map width: a small plateau at each reading, not a spike
+const HEAT_FADE = 0.16;    // readings stop tinting the map beyond ~this fraction of the width
+
+// Readings that have a position on a level's map. Everything geometric — the heatmap, the
+// hull, surveyed area, % passing, dead-zone square footage — is only meaningful for these.
+// A reading saved from the Live page has no map position, and letting one into those figures
+// is what made the report's dead-zone area disagree with the dashboard's dead-spot count.
+function mappedPoints(pts, level) {
+  const lv = level || activeLevel;
+  return (pts || []).filter((p) => p.mapX != null && p.level === lv);
+}
+
+// Readings with no map position carry x/y of NaN and would poison every cell they touch,
+// so they are dropped here rather than silently turning the whole grid into NaN.
+function idwSamples(pts, get) {
+  return pts
+    .map((p) => ({ x: p.mapX, y: p.mapY, s: get(p) }))
+    .filter((p) => p.s != null && !isNaN(p.s) && Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+
 function buildHeatCanvas(pts, gw, gh) {
   const M = METRICS[heatMetric];
   const c = document.createElement("canvas");
   c.width = gw; c.height = gh;
   const ctx = c.getContext("2d");
   const im = ctx.createImageData(gw, gh), d = im.data;
-  const P = pts.map((p) => ({ x: p.mapX * gw, y: p.mapY * gh, s: M.get(p) })).filter((p) => p.s != null && !isNaN(p.s));
+  const P = idwSamples(pts, M.get);
   if (!P.length) { ctx.putImageData(im, 0, 0); return c; }
-  const sigma = Math.max(gw, gh) * 0.16, twoSig2 = 2 * sigma * sigma;
+  const aspect = gh / gw;                       // map height as a fraction of its width
+  const twoSig2 = 2 * HEAT_FADE * HEAT_FADE;
   for (let y = 0; y < gh; y++) {
+    const fy = gh > 1 ? y / (gh - 1) : 0;
     for (let x = 0; x < gw; x++) {
+      const fx = gw > 1 ? x / (gw - 1) : 0;
       let sw = 0, sv = 0, minD2 = Infinity;
       for (const p of P) {
-        const dx = x - p.x, dy = y - p.y, d2 = dx * dx + dy * dy;
+        const dx = fx - p.x, dy = (fy - p.y) * aspect, d2 = dx * dx + dy * dy;
         if (d2 < minD2) minD2 = d2;
-        const w = 1 / (d2 + 1);
+        const w = 1 / (d2 + IDW_EPS);
         sw += w; sv += w * p.s;
       }
       const rgb = heatRGB(sv / sw) || [124, 138, 166];
@@ -1045,15 +1095,24 @@ function buildHeatCanvas(pts, gw, gh) {
 }
 // scalar IDW value grid (same field buildHeatCanvas colors) — used to trace contour lines
 // and to score requirement pass/fail. metricKey defaults to the active heatMetric.
-function buildHeatValueGrid(pts, gw, gh, metricKey) {
+// `aspect` is the map's height as a fraction of its width. Callers that score a grid must pass
+// the SAME aspect the map is drawn at, or the scored field and the drawn field disagree.
+function buildHeatValueGrid(pts, gw, gh, metricKey, aspect) {
   const M = METRICS[metricKey || heatMetric];
-  const P = pts.map((p) => ({ x: p.mapX * gw, y: p.mapY * gh, s: M.get(p) })).filter((p) => p.s != null && !isNaN(p.s));
+  const P = idwSamples(pts, M.get);
   if (P.length < 3) return null;
+  const ar = aspect != null ? aspect : gh / gw;
   const grid = new Float32Array(gw * gh);
   for (let y = 0; y < gh; y++) {
+    const fy = gh > 1 ? y / (gh - 1) : 0;
     for (let x = 0; x < gw; x++) {
+      const fx = gw > 1 ? x / (gw - 1) : 0;
       let sw = 0, sv = 0;
-      for (const p of P) { const dx = x - p.x, dy = y - p.y; const w = 1 / (dx * dx + dy * dy + 1); sw += w; sv += w * p.s; }
+      for (const p of P) {
+        const dx = fx - p.x, dy = (fy - p.y) * ar;
+        const w = 1 / (dx * dx + dy * dy + IDW_EPS);
+        sw += w; sv += w * p.s;
+      }
       grid[y * gw + x] = sv / sw;
     }
   }
@@ -1072,8 +1131,9 @@ function contourLevels(grid) {
 }
 // marching-squares iso-value contour lines with labels (like a pro RF report), drawn on ctx W×H
 function drawContours(ctx, W, H, mapped) {
-  const gw = 100, gh = Math.max(1, Math.round((100 * H) / W));
-  const grid = buildHeatValueGrid(mapped, gw, gh);
+  const ar = mapAspect();
+  const gw = 100, gh = Math.max(1, Math.round(100 * ar));
+  const grid = buildHeatValueGrid(mapped, gw, gh, null, ar);
   if (!grid) return;
   const levels = contourLevels(grid);
   if (!levels.length) return;
@@ -1104,8 +1164,18 @@ function drawContours(ctx, W, H, mapped) {
           case 4: case 11: seg(top(), right()); break;
           case 6: case 9: seg(top(), bottom()); break;
           case 7: case 8: seg(left(), top()); break;
-          case 5: seg(top(), right()); seg(left(), bottom()); break;
-          case 10: seg(left(), top()); seg(bottom(), right()); break;
+          // Saddle cells: two opposite corners straddle the level, so the pair of segments can
+          // be joined two ways and only one of them is right. Sample the cell centre (the mean
+          // of its corners) to see which pair the middle actually belongs to — a fixed pairing
+          // draws contours that cross themselves through tight dead spots.
+          case 5:  // top-right and bottom-left are above the level
+            if ((tl + tr + br + bl) / 4 > L) { seg(left(), top()); seg(bottom(), right()); }
+            else { seg(top(), right()); seg(left(), bottom()); }
+            break;
+          case 10: // top-left and bottom-right are above the level
+            if ((tl + tr + br + bl) / 4 > L) { seg(top(), right()); seg(left(), bottom()); }
+            else { seg(left(), top()); seg(bottom(), right()); }
+            break;
         }
       }
     }
@@ -1149,14 +1219,14 @@ function requirementHull(mapped) {
   return coverageHull(mapped, 0);
 }
 // build per-gate IDW grids + hull once; shared by the % readout and the map overlay
-function evalRequirement(mapped, gw, gh) {
+function evalRequirement(mapped, gw, gh, aspect) {
   const prof = REQ_PROFILES[reqProfile];
   if (!prof || !prof.gates) return { ok: false, msg: "" };
   if (mapped.length < 3) return { ok: false, msg: "Need ≥3 readings" };
   const metrics = Object.keys(prof.gates);
   const grids = {};
   for (const m of metrics) {
-    const g = buildHeatValueGrid(mapped, gw, gh, m);
+    const g = buildHeatValueGrid(mapped, gw, gh, m, aspect);
     if (!g) return { ok: false, msg: "Need ≥3 readings" };
     grids[m] = g;
   }
@@ -1164,10 +1234,14 @@ function evalRequirement(mapped, gw, gh) {
   if (!hull) return { ok: false, msg: "Need ≥3 readings" };
   return { ok: true, prof, metrics, grids, hull, gw, gh };
 }
-// % of the surveyed (hull-clipped) area that meets the active profile — an estimate
+// % of the surveyed (hull-clipped) area that meets the active profile — an estimate.
+// Scored on the map's own aspect ratio: a fixed 120x90 grid here meant that on any map that
+// wasn't 4:3, this percentage described a differently-stretched field than the pass/fail wash
+// drawn beside it, and the two contradicted each other in the same report.
 function requirementStats(mapped) {
-  const gw = 120, gh = 90;
-  const ev = evalRequirement(mapped, gw, gh);
+  const ar = mapAspect();
+  const gw = 120, gh = Math.max(1, Math.round(120 * ar));
+  const ev = evalRequirement(mapped, gw, gh, ar);
   if (!ev.ok) return ev;
   let inside = 0, pass = 0;
   for (let y = 0; y < gh; y++) {
@@ -1185,8 +1259,9 @@ function requirementStats(mapped) {
 // charcoal wash over cells that FAIL the profile (passing area keeps its heat color) — drawn W×H
 function drawRequirementOverlay(ctx, W, H, mapped) {
   if (reqProfile === "none") return;
-  const gw = 100, gh = Math.max(1, Math.round((100 * H) / W));
-  const ev = evalRequirement(mapped, gw, gh);
+  const ar = mapAspect();
+  const gw = 100, gh = Math.max(1, Math.round(100 * ar));
+  const ev = evalRequirement(mapped, gw, gh, ar);
   if (!ev.ok) return;
   const off = document.createElement("canvas");
   off.width = gw; off.height = gh;
@@ -1219,7 +1294,7 @@ function updateAreaPassing() {
   if (!el) return;
   if (reqProfile === "none") { el.classList.add("hidden"); return; }
   el.classList.remove("hidden");
-  const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mapped = mappedPoints(points);
   const s = requirementStats(mapped);
   const prof = REQ_PROFILES[reqProfile];
   if (!s.ok) {
@@ -1246,19 +1321,51 @@ function haversineFt(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 // real-world size of the active level's base map, in feet across the FULL image → {ftW,ftH,source} or null
-function getScale() {
-  if (geoBounds) {   // aerial: true scale for free — never ask the tech to calibrate these
-    const midLat = (geoBounds.north + geoBounds.south) / 2, midLon = (geoBounds.west + geoBounds.east) / 2;
-    return { ftW: haversineFt(midLat, geoBounds.west, midLat, geoBounds.east), ftH: haversineFt(geoBounds.north, midLon, geoBounds.south, midLon), source: "gps" };
+// Real-world size of ANY level's base map. Takes the geo bounds / calibration off the level
+// itself rather than the active-level globals, so the report can print each floor's own figures
+// instead of repeating the selected floor's numbers under every floor's heatmap.
+function scaleForLevel(geo, cal, imgAspect) {
+  if (geo) {   // aerial: true scale for free — never ask the tech to calibrate these
+    const midLat = (geo.north + geo.south) / 2, midLon = (geo.west + geo.east) / 2;
+    return { ftW: haversineFt(midLat, geo.west, midLat, geo.east), ftH: haversineFt(geo.north, midLon, geo.south, midLon), source: "gps" };
   }
-  if (planMode === "image" && calibration && floorPlanImg && floorPlanImg.naturalWidth) {
-    const Wn = floorPlanImg.naturalWidth, Hn = floorPlanImg.naturalHeight;
-    const dpx = Math.hypot((calibration.b.x - calibration.a.x) * Wn, (calibration.b.y - calibration.a.y) * Hn);
-    if (dpx < 1) return null;
-    const ftPerPx = calibration.feet / dpx;   // isotropic for a manual ruler
-    return { ftW: Wn * ftPerPx, ftH: Hn * ftPerPx, source: "manual" };
+  if (cal && cal.feet > 0) {
+    // ftW cancels out the image's pixel size and depends only on its proportions, so a stored
+    // aspect is enough — no need for the image itself to be loaded.
+    const ar = imgAspect != null ? imgAspect : cal.imgAspect;
+    if (ar == null) return null;
+    const d = Math.hypot(cal.b.x - cal.a.x, (cal.b.y - cal.a.y) * ar);
+    if (!(d > 1e-4)) return null;    // a reference line that short can't set a believable scale
+    const ftW = cal.feet / d;                 // isotropic for a manual ruler
+    return { ftW, ftH: ftW * ar, source: "manual" };
   }
   return null;
+}
+// the active level's scale
+function getScale() {
+  const liveAspect = floorPlanImg && floorPlanImg.naturalWidth
+    ? floorPlanImg.naturalHeight / floorPlanImg.naturalWidth : null;
+  if (geoBounds) return scaleForLevel(geoBounds, null, null);
+  if (planMode === "image" && calibration) return scaleForLevel(null, calibration, liveAspect);
+  return null;
+}
+function scaleFor(l) {
+  if (!l) return null;
+  if (l.id === activeLevel) return getScale();
+  return scaleForLevel(l.geo || null, l.cal || null, null);
+}
+// Height:width ratio of the base map, used so distance across it means the same thing in both
+// axes. Readings are stored as [0,1] image fractions, which are only proportional to real
+// distance once the map's own proportions are applied. Prefers the true scale in feet and falls
+// back to the image's pixel proportions; every grid that gets scored must use this same number
+// as the grid that gets drawn, or the two describe differently-stretched worlds.
+function mapAspect() {
+  const s = getScale();
+  if (s && s.ftW > 0 && s.ftH > 0) return s.ftH / s.ftW;
+  if (floorPlanImg && floorPlanImg.naturalWidth > 0) return floorPlanImg.naturalHeight / floorPlanImg.naturalWidth;
+  const c = $("heatCanvas");
+  if (c && c.width > 0 && c.height > 0) return c.height / c.width;
+  return 1;
 }
 // |shoelace| area of a [0,1]-fraction polygon (fraction of the whole image, 0..1)
 function polyFracArea(poly) {
@@ -1279,8 +1386,9 @@ function surveyedSqft(mapped) {
 function holeAreaSqft(threshold, mapped) {
   const surveyed = surveyedSqft(mapped);
   if (surveyed == null) return null;
-  const gw = 120, gh = 90;
-  const grid = buildHeatValueGrid(mapped, gw, gh, "signal");
+  const ar = mapAspect();
+  const gw = 120, gh = Math.max(1, Math.round(120 * ar));
+  const grid = buildHeatValueGrid(mapped, gw, gh, "signal", ar);
   const hull = requirementHull(mapped);
   if (!grid || !hull) return null;
   let inside = 0, below = 0;
@@ -1436,7 +1544,7 @@ function renderCoverageMap() {
   if (planMode === "schematic") renderRooms();
   const wrap = $("mapWrap"), cw = wrap.clientWidth, ch = wrap.clientHeight;
   if (!cw || !ch) return;
-  const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mapped = mappedPoints(points);
   $("dotsLayer").innerHTML = mapped
     .map((p) => {
       return `<div title="${esc(p.location)} · ${p.signal} dBm" style="position:absolute;left:${(p.mapX * 100).toFixed(1)}%;top:${(p.mapY * 100).toFixed(1)}%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:${pointColor(p)};border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.7)"></div>`;
@@ -1667,15 +1775,18 @@ function gpsToMap(fix) {
 
 // Inverse transform: aerial 0..1 relative coords → {lat,lon}. Exact inverse of
 // gpsToMap (round-trips to ~1e-14). Requires geoBounds — returns null without it.
-function mapToLatLon(mapX, mapY) {
-  if (!geoBounds) return null;
-  const z = geoBounds.z;
-  const wx = mercWorldX(geoBounds.west, z), nx = mercWorldX(geoBounds.east, z) - wx;
-  const ny0 = mercWorldY(geoBounds.north, z), ny = mercWorldY(geoBounds.south, z) - ny0;
-  const lon = tile2lon(wx + mapX * nx, z);
-  const lat = tile2lat(ny0 + mapY * ny, z);
-  return { lat, lon };
+// Project an image fraction back to lat/lon through a SPECIFIC level's aerial bounds. Each
+// level has its own aerial, so anything walking across levels (the KML export) has to use the
+// bounds belonging to the reading's own level — pushing them all through the active level's
+// bounds scattered upstairs readings across the yard at coordinates nobody measured.
+function mapToLatLonIn(geo, mapX, mapY) {
+  if (!geo) return null;
+  const z = geo.z;
+  const wx = mercWorldX(geo.west, z), nx = mercWorldX(geo.east, z) - wx;
+  const ny0 = mercWorldY(geo.north, z), ny = mercWorldY(geo.south, z) - ny0;
+  return { lat: tile2lat(ny0 + mapY * ny, z), lon: tile2lon(wx + mapX * nx, z) };
 }
+function mapToLatLon(mapX, mapY) { return mapToLatLonIn(geoBounds, mapX, mapY); }
 
 // Live "you are here" dot on the aerial. Separate #youHere element inside #mapWrap
 // so renderCoverageMap()'s dotsLayer.innerHTML rebuild never wipes it. Shown only on
@@ -1704,7 +1815,7 @@ function markGpsSpot() {
   const m = gpsToMap(lastGpsFix);
   const outside = m.outside, mapX = m.mapX, mapY = m.mapY;
   const label = ($("easyRoom") && $("easyRoom").value.trim())
-    || "Point " + (points.filter((p) => p.mapX != null && p.level === activeLevel).length + 1);
+    || "Point " + (mappedPoints(points).length + 1);
   const added = addPoint(label, lastScan.current, { mapX, mapY });
   if (!added) return;
   // GPS marking is inherently GPS-located — stamp the raw coords even if the "tag readings" box is off
@@ -1771,7 +1882,7 @@ function onMapTap(ev) {
   }
   if (mapMode === "edit") return; // in edit mode, taps are for arranging rooms, not placing readings
   if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
-  const label = $("easyRoom").value.trim() || "Point " + (points.filter((p) => p.mapX != null && p.level === activeLevel).length + 1);
+  const label = $("easyRoom").value.trim() || "Point " + (mappedPoints(points).length + 1);
   if (!addPoint(label, lastScan.current, { mapX: x, mapY: y })) return;
   $("easyRoom").value = "";
   renderCoverageMap();
@@ -1804,7 +1915,7 @@ function togglePixelate() {
 }
 
 function undoMapPoint() {
-  const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mapped = mappedPoints(points);
   if (!mapped.length) return toast("No dots to undo");
   delPoint(mapped[mapped.length - 1].id);
 }
@@ -1813,7 +1924,7 @@ function undoMapPoint() {
 function generateMapDataURL() {
   if (planMode === "schematic") return generateSchematicDataURL();
   if (!floorPlanImg || !floorPlanImg.naturalWidth) return null;
-  const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mapped = mappedPoints(points);
   if (!mapped.length) return null;
   const scale = Math.min(1, 1100 / floorPlanImg.naturalWidth);
   const W = Math.round(floorPlanImg.naturalWidth * scale), H = Math.round(floorPlanImg.naturalHeight * scale);
@@ -2222,7 +2333,12 @@ function applyCalibration() {
   const feet = parseFloat(($("calFeet") && $("calFeet").value) || "");
   if (!(feet > 0)) return toast("Enter the real distance in feet");
   if (!calTemp.a || !calTemp.b) return toast("Tap both ends of the distance first");
-  calibration = { a: calTemp.a, b: calTemp.b, feet };
+  // Record the plan image's proportions with the reference line. The scale in feet depends on
+  // them, and without it a level's square footage can only be worked out while that level is
+  // the one on screen — which is why the report could only ever print one floor's figures.
+  const imgAspect = floorPlanImg && floorPlanImg.naturalWidth
+    ? floorPlanImg.naturalHeight / floorPlanImg.naturalWidth : null;
+  calibration = { a: calTemp.a, b: calTemp.b, feet, imgAspect };
   if (curLevel()) { curLevel().cal = calibration; saveLevels(); }
   calTemp = { a: null, b: null };
   if ($("calFeet")) $("calFeet").value = "";
@@ -2246,7 +2362,7 @@ function updateScaleUI() {
   if (!pill) return;
   const s = getScale();
   if (!s) { pill.classList.add("hidden"); return; }
-  const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mapped = mappedPoints(points);
   const area = surveyedSqft(mapped), src = s.source === "gps" ? "from GPS" : "calibrated";
   pill.classList.remove("hidden");
   pill.innerHTML = area ? `📐 <b>≈ ${fmtSqft(area)}</b> surveyed <span class="muted">(${src})</span>` : `📐 Scale ${src}`;
@@ -2539,7 +2655,7 @@ function roomPointerUp() {
 
 // bake the drawn schematic (rooms + labels + sqft) + heatmap + dots into an image for the PDF
 function generateSchematicDataURL() {
-  const mapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mapped = mappedPoints(points);
   if (!rooms.length && !mapped.length && !apMarks.length) return null;
   const pad = 26, TH = 52, RW = 1000, RH = 750;
   const W = RW + pad * 2, H = TH + RH + pad * 2;
@@ -2735,7 +2851,7 @@ function profileBundle() {
   SITE_FIELDS.forEach((f) => (site[f] = $(f) ? $(f).value : ""));
   return {
     site, points, levels, activeLevel, cellPoints, importedScan, reportPhotos,
-    heatmap: heatmapDataUrl, siteplan: sitePlan,
+    heatmap: heatmapDataUrl, siteplan: sitePlan, surveyEnv,
   };
 }
 
@@ -2771,7 +2887,7 @@ function readBundle(id) {
   try { return JSON.parse(localStorage.getItem(PROFILE_PREFIX + id)) || null; } catch (e) { return null; }
 }
 function emptyBundle() {
-  return { site: {}, points: [], levels: [], activeLevel: null, cellPoints: [], importedScan: [], reportPhotos: [], heatmap: null, siteplan: emptySitePlan() };
+  return { site: {}, points: [], levels: [], activeLevel: null, cellPoints: [], importedScan: [], reportPhotos: [], heatmap: null, siteplan: emptySitePlan(), surveyEnv: null };
 }
 
 // Load a bundle into the working keys + memory + UI. Follows importJSON's no-listener
@@ -2784,6 +2900,7 @@ function restoreProfileBundle(b) {
   importedScan = Array.isArray(b.importedScan) ? b.importedScan : [];
   reportPhotos = Array.isArray(b.reportPhotos) ? b.reportPhotos : [];
   heatmapDataUrl = b.heatmap || null;
+  surveyEnv = (b.surveyEnv && b.surveyEnv.current) ? b.surveyEnv : null;
   sitePlan = (b.siteplan && b.siteplan.yard) ? b.siteplan : emptySitePlan();
   saveSitePlan();
   levels = (b.levels && b.levels.length) ? b.levels
@@ -2797,6 +2914,7 @@ function restoreProfileBundle(b) {
   saveLevels();
   try { if (heatmapDataUrl) localStorage.setItem(LS_HEATMAP, heatmapDataUrl); else localStorage.removeItem(LS_HEATMAP); } catch (e) {}
   try { localStorage.setItem(LS_IMPORTEDSCAN, JSON.stringify(importedScan)); } catch (e) {}
+  try { if (surveyEnv) localStorage.setItem(LS_SURVEYENV, JSON.stringify(surveyEnv)); else localStorage.removeItem(LS_SURVEYENV); } catch (e) {}
 
   // site fields + their working key
   const s = b.site || {};
@@ -2957,6 +3075,7 @@ function loadState() {
   try { reportPhotos = JSON.parse(localStorage.getItem(LS_PHOTOS)) || []; } catch (e) { reportPhotos = []; }
   try { importedScan = JSON.parse(localStorage.getItem(LS_IMPORTEDSCAN)) || []; } catch (e) { importedScan = []; }
   try { const sp = JSON.parse(localStorage.getItem(LS_SITEPLAN)); sitePlan = sp && sp.yard ? sp : emptySitePlan(); } catch (e) { sitePlan = emptySitePlan(); }
+  try { const se = JSON.parse(localStorage.getItem(LS_SURVEYENV)); surveyEnv = se && se.current ? se : null; } catch (e) { surveyEnv = null; }
   try { levels = JSON.parse(localStorage.getItem(LS_LEVELS)) || []; } catch (e) { levels = []; }
   try { activeLevel = localStorage.getItem(LS_ACTIVELEVEL) || null; } catch (e) {}
   initLevels();
@@ -3016,9 +3135,14 @@ function exportCSV() {
 function exportKML() {
   saveLevelMap();
   const hasGps = points.some((p) => p.gps && p.gps.lat != null);
-  if (!geoBounds && !hasGps) {
+  const anyGeo = levels.some((l) => l.geo);
+  if (!anyGeo && !hasGps) {
     return toast("KML needs an aerial (Aerial from address) or GPS-tagged readings first.");
   }
+  const geoOf = (levelId) => {
+    const l = levels.find((L) => L.id === levelId);
+    return (l && l.geo) || null;
+  };
   const x = (s) => esc(s); // esc() already escapes & < > "
   const parts = [];
   parts.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -3030,8 +3154,10 @@ function exportKML() {
   points.forEach((p) => {
     let lat = null, lon = null;
     if (p.gps && p.gps.lat != null && p.gps.lon != null) { lat = p.gps.lat; lon = p.gps.lon; }
-    else if (geoBounds && p.mapX != null && p.mapY != null) {
-      const ll = mapToLatLon(p.mapX, p.mapY); lat = ll.lat; lon = ll.lon;
+    else if (p.mapX != null && p.mapY != null) {
+      // through the reading's OWN level's aerial, not whichever one happens to be open
+      const ll = mapToLatLonIn(geoOf(p.level), p.mapX, p.mapY);
+      if (ll) { lat = ll.lat; lon = ll.lon; }
     }
     if (lat == null || lon == null) return;
     const r = rate(p.signal, p.snr);
@@ -3128,8 +3254,14 @@ function pointInPoly(x, y, poly) {
   return inside;
 }
 
-/* ---------- AI insights engine (local, rule-based) ---------- */
-function computeInsights(pts, site) {
+/* ---------- findings engine (local, rule-based) ---------- */
+// `env` is the Wi-Fi environment recorded WHEN THE SURVEY WAS WALKED. It must be passed in
+// rather than read from lastScan: lastScan is refreshed every 5 seconds from whatever network
+// this Mac is on right now, so regenerating a saved survey from the office used to describe
+// the office's network in the client's report. Falls back to live only when a survey predates
+// this field, and buildReport says which of the two it used.
+function computeInsights(pts, site, env) {
+  const scanEnv = env && env.current ? env : (lastScan && lastScan.current ? lastScan : null);
   const F = [];
   const plan = parseFloat(site.f_plan) || null;
   const sig = pts.filter((p) => p.signal != null);
@@ -3156,11 +3288,11 @@ function computeInsights(pts, site) {
     subs.push({ name: "Throughput", val: Math.round(thr.reduce((a, p) => a + t(p.download_mbps), 0) / thr.length), w: 0.2 });
   }
   let intf = 100;
-  const co = (lastScan && lastScan.current && lastScan.nearby) ? lastScan.nearby.filter((n) => n.channel === lastScan.current.channel && n.ssid !== lastScan.current.ssid) : [];
+  const co = (scanEnv && scanEnv.current && scanEnv.nearby) ? scanEnv.nearby.filter((n) => n.channel === scanEnv.current.channel && n.ssid !== scanEnv.current.ssid) : [];
   if (co.length > 1) intf -= Math.min(40, (co.length - 1) * 8);
   const bandPts = pts.filter((p) => p.band);
   const all24 = bandPts.length >= 2 && bandPts.every((p) => (p.band || "").indexOf("2") === 0);
-  const has5 = lastScan && lastScan.nearby && lastScan.nearby.some((n) => (n.band || "").indexOf("5") === 0);
+  const has5 = scanEnv && scanEnv.nearby && scanEnv.nearby.some((n) => (n.band || "").indexOf("5") === 0);
   if (all24 && has5) intf -= 15;
   intf = Math.max(0, intf);
   if (bandPts.length || co.length) subs.push({ name: "Interference", val: Math.round(intf), w: 0.1 });
@@ -3178,17 +3310,20 @@ function computeInsights(pts, site) {
   const grade = score >= 90 ? ["Excellent", "#15803d"] : score >= 75 ? ["Good", "#3f8f13"] : score >= 60 ? ["Fair", "#b45309"] : score >= 40 ? ["Poor", "#dc2626"] : ["Critical", "#b91c1c"];
 
   if (pts.length >= 1 && pts.length < 4) F.push({ severity: "info", text: `Only ${pts.length} reading${pts.length > 1 ? "s" : ""} captured — conclusions are provisional until more rooms are sampled.`, rec: "Aim for about one reading per 400–500 sq ft plus the corners farthest from the router." });
-  if (dead.length) { const w = dead.reduce((a, b) => (b.signal < a.signal ? b : a)); const holeFt = holeAreaSqft(-75, sig); const areaTxt = holeFt ? ` About <b>${fmtSqft(holeFt)}</b> of the surveyed area falls below −75 dBm.` : ""; F.push({ severity: "critical", text: `<b>${dead.length} dead zone${dead.length > 1 ? "s" : ""}</b> below −75 dBm: ${nm(dead)}.${areaTxt} The worst is ${esc(w.location)} at ${w.signal} dBm — Wi-Fi calls drop and smart devices fall offline here.`, rec: `Add a mesh node or wired access point roughly midway between the router and ${esc(w.location)}. A wired-backhaul node beats a repeater since the feeding signal is already ${w.signal} dBm. Re-measure to confirm the far rooms clear −67 dBm.`, loc: locOf(w) }); }
+  // Area has to be measured over the readings that actually sit on the map — `sig` includes
+  // Live-page readings with no position (x/y NaN) and readings from other floors, which drove
+  // this figure to 0 and silently dropped the sentence while the dashboard still showed a count.
+  if (dead.length) { const w = dead.reduce((a, b) => (b.signal < a.signal ? b : a)); const holeFt = holeAreaSqft(-75, mappedPoints(pts)); const areaTxt = holeFt ? ` About <b>${fmtSqft(holeFt)}</b> of the surveyed area falls below −75 dBm.` : ""; F.push({ severity: "critical", text: `<b>${dead.length} dead zone${dead.length > 1 ? "s" : ""}</b> below −75 dBm: ${nm(dead)}.${areaTxt} The worst is ${esc(w.location)} at ${w.signal} dBm — Wi-Fi calls drop and smart devices fall offline here.`, rec: `Add a mesh node or wired access point roughly midway between the router and ${esc(w.location)}. A wired-backhaul node beats a repeater since the feeding signal is already ${w.signal} dBm. Re-measure to confirm the far rooms clear −67 dBm.`, loc: locOf(w) }); }
   if (marg.length) { const wm = marg.reduce((a, b) => (b.signal < a.signal ? b : a)); F.push({ severity: "warning", text: `${marg.length} marginal location${marg.length > 1 ? "s" : ""} (−68 to −75 dBm): ${nm(marg)}. Fine for browsing, borderline for 4K, video calls, and gaming when busy.`, rec: dead.length ? "Position any new access point so it overlaps both the dead zones and these rooms." : "Relocate the gateway higher and more central first; add one AP only if these rooms are heavily used.", loc: locOf(wm) }); }
   if (lowSnr.length) { const w = lowSnr.reduce((a, b) => (b.snr < a.snr ? b : a)); F.push({ severity: "warning", text: `${lowSnr.length} location${lowSnr.length > 1 ? "s" : ""} show strong signal but noisy air (SNR under 15 dB): ${nm(lowSnr)}. Lowest is ${esc(w.location)} at SNR ${w.snr} dB — bars look fine but throughput suffers.`, rec: "This is interference, not distance — adding an AP won't help. Move the gateway to a cleaner channel (2.4 GHz: stick to 1/6/11).", loc: locOf(w) }); }
-  if (co.length >= 2) { const top = co.slice(0, 3).map((n) => esc(n.ssid || "(hidden)")).join(", "); F.push({ severity: "warning", text: `Channel ${lastScan.current.channel} (${lastScan.current.band || "?"}) is crowded — ${co.length} neighboring networks share it${top ? ", including " + top : ""}. Co-channel networks split airtime even at full signal.`, rec: "Change the gateway's channel to a quieter one (2.4 GHz: least-busy of 1/6/11) or enable auto-channel. Keep 2.4 GHz at 20 MHz width." }); }
+  if (co.length >= 2) { const top = co.slice(0, 3).map((n) => esc(n.ssid || "(hidden)")).join(", "); F.push({ severity: "warning", text: `Channel ${scanEnv.current.channel} (${scanEnv.current.band || "?"}) is crowded — ${co.length} neighboring networks share it${top ? ", including " + top : ""}. Co-channel networks split airtime even at full signal.`, rec: "Change the gateway's channel to a quieter one (2.4 GHz: least-busy of 1/6/11) or enable auto-channel. Keep 2.4 GHz at 20 MHz width." }); }
   if (all24 && has5) F.push({ severity: "warning", text: "Every surveyed room connected on 2.4 GHz even though 5 GHz is available nearby — the client is stuck on the slower, congested band, capping speeds regardless of signal.", rec: "Enable band steering (single SSID, router picks the band) or manually join 5 GHz near the router. Keep 2.4 GHz for far rooms and IoT." });
-  if (lastScan && lastScan.current) {
-    const sg = secGrade(lastScan.current.security), nm2 = esc(lastScan.current.ssid || "the client network");
+  if (scanEnv && scanEnv.current) {
+    const sg = secGrade(scanEnv.current.security), nm2 = esc(scanEnv.current.ssid || "the client network");
     if (sg.g === "open") F.push({ severity: "critical", text: `The client network “${nm2}” is <b>open (no encryption)</b> — anyone in range can read traffic and join.`, rec: "Enable WPA3 (or WPA2 at minimum) on the gateway before handoff." });
     else if (sg.g === "wep" || sg.g === "wpa") F.push({ severity: "warning", text: `“${nm2}” uses <b>${esc(sg.label)}</b>, which is outdated and crackable.`, rec: "Upgrade the gateway to WPA2 or, preferably, WPA3." });
-    else if (sg.g === "wpa2" && wifiGen(lastScan.current).g >= 6) F.push({ severity: "info", text: `“${nm2}” runs modern Wi-Fi but only WPA2 security. WPA3 adds stronger encryption and protected management frames.`, rec: "Switch to WPA3 (or WPA2/WPA3 transitional) if all client devices support it." });
-    const infraAll = [lastScan.current].concat(lastScan.nearby || []);
+    else if (sg.g === "wpa2" && wifiGen(scanEnv.current).g >= 6) F.push({ severity: "info", text: `“${nm2}” runs modern Wi-Fi but only WPA2 security. WPA3 adds stronger encryption and protected management frames.`, rec: "Switch to WPA3 (or WPA2/WPA3 transitional) if all client devices support it." });
+    const infraAll = [scanEnv.current].concat(scanEnv.nearby || []);
     const sixBad = analyzeInfra(infraAll).sixViolation;
     if (sixBad) F.push({ severity: "warning", text: `${sixBad} access point${sixBad > 1 ? "s are" : " is"} broadcasting on 6 GHz without WPA3 — the 6 GHz band mandates WPA3/OWE.`, rec: "Reconfigure those APs for WPA3; some clients won't connect to a non-compliant 6 GHz SSID." });
   }
@@ -3239,7 +3374,10 @@ function healthBadge(ins, size) {
 }
 
 function buildReport(site, pts) {
-  const ins = computeInsights(pts, site);
+  // The RF environment the survey was walked in — falls back to live only for surveys saved
+  // before this was recorded, and the Interference section says which one it is either way.
+  const env = (surveyEnv && surveyEnv.current) ? surveyEnv : null;
+  const ins = computeInsights(pts, site, env);
   const rated = pts.map((p) => ({ ...p, r: rate(p.signal, p.snr) }));
   const dead = rated.filter((p) => p.r.cls === "poor");
   const signals = pts.map((p) => p.signal).filter((s) => s != null);
@@ -3263,7 +3401,7 @@ function buildReport(site, pts) {
   pts.forEach((p) => { const k = p.location || "—"; (byRoom[k] = byRoom[k] || []).push(p); });
   const roomKeys = Object.keys(byRoom), totalRooms = roomKeys.length;
   const roomsGood = roomKeys.filter((k) => byRoom[k].every((p) => p.signal == null || p.signal >= -67)).length;
-  const mappedNow = pts.filter((p) => p.mapX != null && p.level === activeLevel);
+  const mappedNow = mappedPoints(pts);
   let covPct = null;
   if (reqProfile !== "none") { const rs = requirementStats(mappedNow); if (rs.ok) covPct = rs.pct; }
   if (covPct == null && signals.length) covPct = Math.round((100 * signals.filter((s) => s >= -67).length) / signals.length);
@@ -3328,24 +3466,39 @@ function buildReport(site, pts) {
 
   // per-floor heatmaps
   let heatmapSection = "";
+  const HM = METRICS[heatMetric];
+  const rp = reqProfile !== "none" ? REQ_PROFILES[reqProfile] : null;
+
+  // Area and % passing are per-FLOOR figures. They used to be printed once, from whichever
+  // level happened to be selected, underneath every floor's heatmap — so the same numbers
+  // appeared under all of them and changed depending on what was on screen at the time.
+  const floorFigures = (l) => {
+    const s = scaleFor(l);
+    const pl = mappedPoints(points, l.id);
+    if (!s || pl.length < 3) return "";
+    const area = polyFracArea(requirementHull(pl) || coverageHull(pl, 0.14) || []) * s.ftW * s.ftH;
+    if (!area) return "";
+    let out = `<p class="legend">Surveyed area ≈ <b>${fmtSqft(area)}</b> (${s.source === "gps" ? "scaled from GPS imagery" : "from the set scale"}).</p>`;
+    if (rp && l.id === activeLevel) {
+      const rs = requirementStats(pl);
+      const sqPass = rs.ok ? ` (≈ ${Math.round((area * rs.pct) / 100).toLocaleString()} ft²)` : "";
+      out += `<p class="legend"><b>Requirement — ${esc(rp.label)}</b> (${esc(reqGateText(rp))}): ${rs.ok ? `an estimated <b>${rs.pct}%</b>${sqPass} of this floor passes` : "insufficient readings to score"}. Greyed cells fall short of target.</p>`;
+    }
+    return out;
+  };
+
   const levelShots = levels.filter((l) => l.snapshot);
   if (levelShots.length) {
-    heatmapSection = levelShots.map((l) => `<h2>Coverage — ${esc(l.name)}</h2><img class="hm" src="${l.snapshot}">`).join("");
+    heatmapSection = levelShots.map((l) =>
+      `<h2>Coverage — ${esc(l.name)}</h2><img class="hm" src="${l.snapshot}">${floorFigures(l)}`).join("");
   } else {
     const coverImg = generateMapDataURL() || heatmapDataUrl;
-    heatmapSection = coverImg ? `<h2>Coverage Heatmap</h2><img class="hm" src="${coverImg}">` : "";
+    const cur = levels.find((l) => l.id === activeLevel);
+    heatmapSection = coverImg
+      ? `<h2>Coverage Heatmap</h2><img class="hm" src="${coverImg}">${cur ? floorFigures(cur) : ""}` : "";
   }
   if (heatmapSection) {
-    const HM = METRICS[heatMetric];
     heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label} — Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}) — weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>`;
-    const rpMapped = points.filter((p) => p.mapX != null && p.level === activeLevel);
-    const rSqft = surveyedSqft(rpMapped);
-    if (rSqft) heatmapSection += `<p class="legend">Surveyed area ≈ <b>${fmtSqft(rSqft)}</b> (${getScale().source === "gps" ? "scaled from GPS imagery" : "from the set scale"}).</p>`;
-    if (reqProfile !== "none") {
-      const rp = REQ_PROFILES[reqProfile], rs = requirementStats(rpMapped);
-      const sqPass = rs.ok && rSqft ? ` (≈ ${Math.round((rSqft * rs.pct) / 100).toLocaleString()} ft²)` : "";
-      heatmapSection += `<p class="legend"><b>Requirement — ${esc(rp.label)}</b> (${esc(reqGateText(rp))}): ${rs.ok ? `an estimated <b>${rs.pct}%</b>${sqPass} of the surveyed area passes` : "insufficient readings to score"}. Greyed cells fall short of target.</p>`;
-    }
     if (levels.some((l) => l.geo)) heatmapSection += `<p class="legend" style="opacity:.7;font-size:11px">Imagery © Esri — GPS-located readings.</p>`;
   }
 
@@ -3358,23 +3511,30 @@ function buildReport(site, pts) {
 
   // nearby / RF environment
   let rfSection = "";
-  const scan = importedScan.length ? importedScan : (lastScan && lastScan.nearby ? lastScan.nearby : []);
+  const envScan = env || (lastScan && lastScan.current ? lastScan : null);
+  const scan = importedScan.length ? importedScan : ((envScan && envScan.nearby) || []);
   if (scan.length) {
-    const cur = lastScan && lastScan.current ? lastScan.current : null;
+    const cur = envScan && envScan.current ? envScan.current : null;
     const co = cur ? scan.filter((n) => n.channel === cur.channel && n.ssid !== cur.ssid) : [];
     const rich = importedScan.length > 0 && scan.some((n) => n.width || n.security || n.vendor);
     const nrows = scan.slice().sort((a, b) => (b.signal ?? -999) - (a.signal ?? -999)).slice(0, 20)
       .map((n) => { const c = cur && n.channel === cur.channel && n.ssid !== cur.ssid; return `<tr><td>${esc(n.ssid || "(hidden)")}</td><td>${n.channel ?? "?"}</td><td>${esc(n.band || "?")}</td>${rich ? `<td>${esc(n.width || "—")}</td>` : ""}<td>${n.signal != null ? n.signal + " dBm" : "—"}</td>${rich ? `<td>${esc(n.security || "—")}</td><td>${esc(n.vendor || "—")}</td>` : ""}<td>${c ? '<span style="color:#b45309;font-weight:700">co-channel</span>' : ""}</td></tr>`; }).join("");
     const rfHead = `<th>Network</th><th>Channel</th><th>Band</th>${rich ? "<th>Width</th>" : ""}<th>Signal</th>${rich ? "<th>Security</th><th>Vendor</th>" : ""}<th>Note</th>`;
+    // Say where these numbers came from. A reader can't otherwise tell a survey-time scan from
+    // one taken wherever the laptop happened to be when the report was printed.
+    const when = importedScan.length ? "Imported from an external scan."
+      : env && env.ts ? `Recorded during the survey, ${new Date(env.ts).toLocaleString()}.`
+      : "Read live when this report was generated, not during the survey — treat as indicative.";
     rfSection = `<h2>Interference &amp; Nearby Networks</h2>
-      <p>${importedScan.length ? `Imported WiFi&nbsp;Explorer scan of <b>${scan.length}</b> networks. ` : `${cur ? `The network was surveyed on <b>channel ${cur.channel} (${cur.band || "?"})</b>. ` : ""}`}${co.length ? `<b>${co.length}</b> neighboring network${co.length > 1 ? "s share" : " shares"} the current channel — a common cause of slowdowns even at full signal.` : "No neighbors share the current channel — the RF environment is clean."} ${scan.length} networks detected in total.</p>
+      <p>${importedScan.length ? `Imported WiFi&nbsp;Explorer scan of <b>${scan.length}</b> networks. ` : `${cur ? `The network was surveyed on <b>channel ${cur.channel} (${cur.band || "?"})</b>. ` : ""}`}${co.length ? `<b>${co.length}</b> neighboring network${co.length > 1 ? "s share" : " shares"} the surveyed channel — a common cause of slowdowns even at full signal.` : "No neighbors share the surveyed channel — the RF environment is clean."} ${scan.length} networks detected in total.</p>
+      <p class="legend">${when}</p>
       <div class="tw"><table><thead><tr>${rfHead}</tr></thead><tbody>${nrows}</tbody></table></div>`;
   }
 
   // infrastructure & security posture (connected AP + any visible neighbors)
   let postureSection = "";
   {
-    const cur3 = lastScan && lastScan.current ? lastScan.current : null;
+    const cur3 = envScan && envScan.current ? envScan.current : null;
     const infraAps = (cur3 ? [cur3] : []).concat(scan);
     if (infraAps.length) {
       const infra = analyzeInfra(infraAps);
@@ -4034,7 +4194,7 @@ function renderHome() {
     $("mcFindings").innerHTML = '<p class="muted" style="font-size:13px">No findings yet — capture readings to populate.</p>';
     return;
   }
-  const ins = computeInsights(points, site);
+  const ins = computeInsights(points, site, surveyEnv);
   $("mcScore").textContent = ins.score;
   $("mcGrade").textContent = ins.grade;
   $("mcRing").style.setProperty("--rc", ins.gradeColor);
@@ -4066,7 +4226,7 @@ function renderReportInsights() {
   if (!el) return;
   if (!points.length) { el.innerHTML = '<p class="muted">Save some readings and the Wi-Fi signal score + findings will appear here, then flow into your PDF.</p>'; return; }
   const site = {}; SITE_FIELDS.forEach((f) => (site[f] = $(f) ? $(f).value : ""));
-  const ins = computeInsights(points, site);
+  const ins = computeInsights(points, site, surveyEnv);
   const cards = ins.findings.slice(0, 5).map((f) => {
     const fc = { critical: "#f87171", warning: "#fbbf24", good: "#34d399", info: "#38bdf8" }[f.severity];
     const loc = f.loc ? `<button class="rilocate" onclick="locateOnMap(${(+f.loc.x).toFixed(4)},${(+f.loc.y).toFixed(4)},'${esc(f.loc.level || "")}')">📍 Locate</button>` : "";

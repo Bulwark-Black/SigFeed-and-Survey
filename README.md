@@ -31,7 +31,7 @@ is what powers the walk-the-property GPS feature.
 | **Coverage** | Pick a survey type, build a base map (draw / upload / auto-layout / aerial-from-address), walk and tap readings, and get a live heatmap with gradient, pass/fail, and labeled contour lines. |
 | **Cellular** | Aim a home cellular gateway / antenna by RSRP / SINR, with live bars and a speed test. |
 | **GPS** | Stream your phone's GPS to the Mac, drop points and property corners as you walk, export a boundary to Google Earth (`.kml`). |
-| **Report** | Client details, a 0–100 coverage score with AI findings, site photos, and a one-click PDF. Save / export / re-open surveys here. |
+| **Report** | Client details, a 0–100 coverage score with automated findings, site photos, and a one-click PDF. Save / export / re-open surveys here. |
 | **Advanced** | Live network internals, NetSpot / WiFi Explorer launchers, nearby-networks table. |
 | **Guide** | "Which tool when" + a plain-English glossary. |
 

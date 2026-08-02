@@ -236,9 +236,12 @@ The **Advanced** page is for digging in and for launching the specialist apps:
 
 1. **Client & Site** — client/owner name, property address, technician. These
    print on the report.
-2. **AI Insights** — as soon as you have readings, this shows a **0–100 Wi‑Fi
+2. **Findings** — as soon as you have readings, this shows a **0–100 Wi‑Fi
    signal score** (coverage + reliability + speed + interference + cellular
    rolled into one grade) plus plain-English findings and recommendations.
+   These come from a fixed set of rules applied to your own readings, so the
+   same survey always produces the same findings and you can explain any of
+   them to a client.
 3. **📥 Ingest tool data** — pull in extra evidence: a saved survey `.json`, a
    Wi‑Fi scan `.csv` from WiFi Explorer, a `.pcap` capture, or a heatmap image
    from NetSpot.
