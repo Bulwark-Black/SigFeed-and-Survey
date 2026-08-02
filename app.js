@@ -225,12 +225,24 @@ async function runSpeedTest() {
 
 /* ---------- toast ---------- */
 let toastTimer;
-function toast(msg) {
+function toast(msg, kind) {
   const t = $("toast");
   t.textContent = msg;
+  t.classList.remove("warn");
+  if (kind === "warn") t.classList.add("warn");
   t.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+  // a warning is something the surveyor has to act on — hold it long enough to be read mid-walk
+  toastTimer = setTimeout(() => t.classList.remove("show"), kind === "warn" ? 7000 : 2800);
+}
+// Something went wrong that costs the user data or work. Never silent.
+function warn(msg) { toast(msg, "warn"); }
+
+// Every localStorage write goes through here. A write that fails must be loud:
+// out in the field a silent quota error looks exactly like "the save button stopped working".
+function store(key, value) {
+  try { localStorage.setItem(key, value); return true; }
+  catch (e) { warn("Storage full — that didn't save. Export the survey now to avoid losing it."); return false; }
 }
 
 /* ---------- mode ---------- */
@@ -379,7 +391,9 @@ function addPoint(loc, c, extras) {
     pt.gps = { lat: lastGpsFix.lat, lon: lastGpsFix.lon, acc: lastGpsFix.acc };
   }
   points.push(pt);
-  savePoints();
+  // If the write failed the reading only exists in memory — it will not survive a reload.
+  // store() has already warned; roll it back so the list can't show a reading that isn't saved.
+  if (!savePoints()) { points.pop(); return null; }
   renderPoints();
   return pt;
 }
@@ -388,7 +402,7 @@ function saveEasy() {
   const loc = $("easyRoom").value.trim();
   if (!loc) return toast("Type the room name first");
   if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
-  addPoint(loc, lastScan.current, null);
+  if (!addPoint(loc, lastScan.current, null)) return;   // storage failed — keep the typed name so it can be retried
   $("easyRoom").value = "";
   $("easyRoom").focus();
   toast(`Saved “${loc}”  ·  ${lastScan.current.signal} dBm`);
@@ -409,7 +423,7 @@ async function captureAdv() {
       if (p.ok) { extras.ping_avg_ms = p.avg_ms; extras.ping_loss_pct = p.loss_pct; }
     } catch (e) {}
   }
-  addPoint(loc, lastScan.current, extras);
+  if (!addPoint(loc, lastScan.current, extras)) return;
   $("capLoc").value = "";
   toast(`Captured “${loc}”`);
 }
@@ -545,19 +559,38 @@ function delPoint(id) {
   renderPoints();
   renderCoverageMap();
 }
+// Clears the MEASUREMENTS for this job. Client details stay — they identify the job, and
+// a different job is a different survey (use "New survey"). Photos and the imported scan are
+// measurements of this property, so they go too: leaving them behind is how one client's
+// premises photos and network list ended up in the next client's PDF.
 function clearAll() {
-  const total = points.length + cellPoints.length;
-  if (total && !confirm(`Start over? This clears ${points.length} readings and ${cellPoints.length} candidate spots.`)) return;
+  const n = (c, one, many) => (c ? `${c} ${c === 1 ? one : many || one + "s"}` : null);
+  const bits = [
+    n(points.length, "reading"),
+    n(cellPoints.length, "candidate spot"),
+    n(reportPhotos.length, "site photo"),
+    importedScan.length ? "the imported scan" : null,
+    heatmapDataUrl ? "the heatmap" : null,
+  ].filter(Boolean);
+  if (!bits.length) return toast("Nothing to clear.");
+  const what = bits.length > 1 ? bits.slice(0, -1).join(", ") + " and " + bits[bits.length - 1] : bits[0];
+  if (!confirm(`Start over?\n\nClears ${what}.\n\nClient and site details are kept. This can't be undone.`)) return;
   points = [];
   cellPoints = [];
+  reportPhotos = [];
+  importedScan = [];
   levels.forEach((l) => (l.snapshot = null));
   savePoints();
   saveCellPoints();
+  savePhotos();
+  store(LS_IMPORTEDSCAN, JSON.stringify(importedScan));
   saveLevels();
   removeHeatmap();
   renderPoints();
   renderCellSpots();
+  renderReportPhotos();
   renderCoverageMap();
+  renderReportInsights();
 }
 
 /* ---------- advanced tools ---------- */
@@ -796,7 +829,7 @@ function stopCellAuto() {
 }
 
 /* ---------- cellular placement spots ---------- */
-function saveCellPoints() { localStorage.setItem(LS_CELLPTS, JSON.stringify(cellPoints)); }
+function saveCellPoints() { return store(LS_CELLPTS, JSON.stringify(cellPoints)); }
 
 function logCellSpot() {
   const label = $("cellSpotLabel").value.trim();
@@ -854,9 +887,10 @@ function attachHeatmap(ev) {
   const r = new FileReader();
   r.onload = () => {
     heatmapDataUrl = r.result;
-    try { localStorage.setItem(LS_HEATMAP, heatmapDataUrl); } catch (e) { /* too big to persist — keep in memory for this session */ }
     renderHeatmapThumb();
-    toast("Heatmap attached — it'll appear in the report");
+    // Still usable this session if it won't fit, but the user has to know it won't survive a reload.
+    try { localStorage.setItem(LS_HEATMAP, heatmapDataUrl); toast("Heatmap attached — it'll appear in the report"); }
+    catch (e) { warn("Heatmap attached, but it's too big to save — make the report before reloading."); }
   };
   r.readAsDataURL(file);
   ev.target.value = "";
@@ -878,8 +912,11 @@ function renderHeatmapThumb() {
 }
 
 /* ---------- site photos & screenshots (embedded in the report) ---------- */
+// Photos are the bulkiest thing in storage, so this is the write most likely to hit quota.
+// It stays non-fatal (they're in memory and will still reach the PDF) but never silent.
 function savePhotos() {
-  try { localStorage.setItem(LS_PHOTOS, JSON.stringify(reportPhotos)); } catch (e) { /* too big to persist — kept in memory for this session */ }
+  try { localStorage.setItem(LS_PHOTOS, JSON.stringify(reportPhotos)); return true; }
+  catch (e) { warn("Photos are too big to save — make the report before reloading, or remove a photo."); return false; }
 }
 
 // downscale each picked image to a ~1400px jpeg data URL (same approach as loadFloorPlan) and add it
@@ -1668,10 +1705,10 @@ function markGpsSpot() {
   const outside = m.outside, mapX = m.mapX, mapY = m.mapY;
   const label = ($("easyRoom") && $("easyRoom").value.trim())
     || "Point " + (points.filter((p) => p.mapX != null && p.level === activeLevel).length + 1);
-  addPoint(label, lastScan.current, { mapX, mapY });
+  const added = addPoint(label, lastScan.current, { mapX, mapY });
+  if (!added) return;
   // GPS marking is inherently GPS-located — stamp the raw coords even if the "tag readings" box is off
-  const added = points[points.length - 1];
-  if (added && !added.gps) { added.gps = { lat: lastGpsFix.lat, lon: lastGpsFix.lon, acc: lastGpsFix.acc }; savePoints(); }
+  if (!added.gps) { added.gps = { lat: lastGpsFix.lat, lon: lastGpsFix.lon, acc: lastGpsFix.acc }; savePoints(); }
   if ($("easyRoom")) $("easyRoom").value = "";
   renderCoverageMap();
   toast(outside ? `Placed “${label}” (outside the mapped area)` : `📍 Placed “${label}” · ${lastScan.current.signal} dBm`);
@@ -1735,7 +1772,7 @@ function onMapTap(ev) {
   if (mapMode === "edit") return; // in edit mode, taps are for arranging rooms, not placing readings
   if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
   const label = $("easyRoom").value.trim() || "Point " + (points.filter((p) => p.mapX != null && p.level === activeLevel).length + 1);
-  addPoint(label, lastScan.current, { mapX: x, mapY: y });
+  if (!addPoint(label, lastScan.current, { mapX: x, mapY: y })) return;
   $("easyRoom").value = "";
   renderCoverageMap();
   toast(`Placed “${label}” · ${lastScan.current.signal} dBm`);
@@ -1812,8 +1849,11 @@ function generateMapDataURL() {
 /* ---------- levels (multi-floor) ---------- */
 function curLevel() { return levels.find((l) => l.id === activeLevel); }
 function newLevelId() { return "L" + (levels.reduce((m, l) => Math.max(m, +l.id.slice(1) || 0), 0) + 1); }
+// The only persistence path for floor plans, rooms, perimeters and AP marks — a silent
+// failure here loses the whole base map, which is the most expensive thing to rebuild.
 function saveLevels() {
-  try { localStorage.setItem(LS_LEVELS, JSON.stringify(levels)); localStorage.setItem(LS_ACTIVELEVEL, activeLevel || ""); } catch (e) {}
+  if (!store(LS_LEVELS, JSON.stringify(levels))) return false;
+  return store(LS_ACTIVELEVEL, activeLevel || "");
 }
 function initLevels() {
   if (!levels.length) {
@@ -2895,11 +2935,11 @@ document.addEventListener("click", (e) => {
 });
 
 /* ---------- persistence ---------- */
-function savePoints() { localStorage.setItem(LS_POINTS, JSON.stringify(points)); }
+function savePoints() { return store(LS_POINTS, JSON.stringify(points)); }
 function saveSite() {
   const s = {};
   SITE_FIELDS.forEach((f) => (s[f] = $(f).value));
-  localStorage.setItem(LS_SITE, JSON.stringify(s));
+  return store(LS_SITE, JSON.stringify(s));
 }
 function loadState() {
   try { points = JSON.parse(localStorage.getItem(LS_POINTS)) || []; } catch (e) { points = []; }
@@ -2931,15 +2971,17 @@ function loadState() {
   renderCoverageMap();
 }
 
+// The master copy. Uses profileBundle() so the file holds everything the app holds —
+// exporting a subset here is how the Site Plan and the active level used to vanish on reimport.
 function exportJSON() {
-  saveLevelMap();
-  const site = {};
-  SITE_FIELDS.forEach((f) => (site[f] = $(f) ? $(f).value : ""));
-  const blob = new Blob([JSON.stringify({ site, points, levels, cellPoints, importedScan, reportPhotos }, null, 2)], { type: "application/json" });
+  const bundle = profileBundle();
+  if (!bundle.points.length && !bundle.cellPoints.length) return toast("Nothing to save yet — take some readings first.");
+  const blob = new Blob([JSON.stringify({ format: "wifi-survey", version: 1, ...bundle }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "wifi-survey-" + (($("f_client") && $("f_client").value) || "site").replace(/\W+/g, "_") + ".json";
   a.click();
+  toast(`Survey file saved — ${bundle.points.length} readings, re-open it here any time`);
 }
 
 // Export every reading as a plain CSV — the format clients actually open (Excel/Numbers/Sheets).
@@ -3033,29 +3075,31 @@ function exportKML() {
   a.click();
   toast("KML saved — open it in Google Earth Pro or Google Maps");
 }
+// Opening a file REPLACES the survey on screen, so it has to ask first — the neutral-looking
+// button was the one destructive action in the app with no confirm.
 function importJSON(ev) {
   const file = ev.target.files[0];
   if (!file) return;
   const r = new FileReader();
   r.onload = () => {
-    try {
-      const d = JSON.parse(r.result);
-      if (d.points) { points = d.points; savePoints(); }
-      if (d.cellPoints) { cellPoints = d.cellPoints; saveCellPoints(); renderCellSpots(); }
-      if (d.reportPhotos) { reportPhotos = d.reportPhotos; savePhotos(); renderReportPhotos(); }
-      if (d.levels && d.levels.length) {
-        levels = d.levels;
-        activeLevel = levels[0].id;
-        initLevels();
-        saveLevels();
-        applyLevelMap(curLevel());
-        renderLevelTabs();
-      }
-      if (d.site) { SITE_FIELDS.forEach((f) => { if (d.site[f] != null && $(f)) $(f).value = d.site[f]; }); saveSite(); }
-      renderPoints();
-      renderCoverageMap();
-      toast("Imported " + (d.points ? d.points.length : 0) + " readings");
-    } catch (e) { toast("Import failed — bad file"); }
+    let d;
+    try { d = JSON.parse(r.result); } catch (e) { return warn("Import failed — that isn't a survey file."); }
+    if (!d || typeof d !== "object" || (!Array.isArray(d.points) && !Array.isArray(d.levels))) {
+      return warn("Import failed — that file has no survey data in it.");
+    }
+    const live = points.length + cellPoints.length;
+    if (live && !confirm(
+      `Open this survey file?\n\nIt replaces what's on screen now — ${points.length} readings and ${cellPoints.length} candidate spots.\n\n` +
+      `Cancel and use “Save survey file” first if you haven't backed this one up.`
+    )) return;
+    restoreProfileBundle(d);
+    // Readings written before levels existed carry no level — adopt the active one so they
+    // appear on the map instead of only in the list.
+    points.forEach((p) => { if (!p.level) p.level = activeLevel; });
+    savePoints();
+    renderPoints();
+    renderCoverageMap();
+    toast(`Opened — ${points.length} readings`);
   };
   r.readAsText(file);
   ev.target.value = "";
@@ -3571,19 +3615,29 @@ function ingestFile(ev) {
   r.readAsText(file);
   ev.target.value = "";
 }
+// Same restore as importJSON — a survey .json dropped on the report's ingest box is the
+// same file, so it goes through the same complete path rather than a partial copy of it.
 function importSurveyText(text) {
   const st = $("ingestStatus");
-  try {
-    const d = JSON.parse(text);
-    if (d.points) { points = d.points; savePoints(); }
-    if (d.cellPoints) { cellPoints = d.cellPoints; saveCellPoints(); renderCellSpots(); }
-    if (d.importedScan) { importedScan = d.importedScan; try { localStorage.setItem(LS_IMPORTEDSCAN, JSON.stringify(importedScan)); } catch (e) {} }
-    if (d.reportPhotos) { reportPhotos = d.reportPhotos; savePhotos(); renderReportPhotos(); }
-    if (d.levels && d.levels.length) { levels = d.levels; activeLevel = levels[0].id; initLevels(); saveLevels(); applyLevelMap(curLevel()); renderLevelTabs(); }
-    if (d.site) { SITE_FIELDS.forEach((f) => { if (d.site[f] != null && $(f)) $(f).value = d.site[f]; }); saveSite(); }
-    renderPoints(); renderCoverageMap();
-    if (st) st.innerHTML = `✅ Imported survey — <b>${d.points ? d.points.length : 0}</b> readings restored.`;
-  } catch (e) { if (st) st.textContent = "Import failed — that .json wasn't a valid survey file."; }
+  let d;
+  try { d = JSON.parse(text); } catch (e) {
+    if (st) st.textContent = "Import failed — that .json wasn't a valid survey file.";
+    return;
+  }
+  if (!d || typeof d !== "object" || (!Array.isArray(d.points) && !Array.isArray(d.levels))) {
+    if (st) st.textContent = "That .json has no survey data in it.";
+    return;
+  }
+  const live = points.length + cellPoints.length;
+  if (live && !confirm(
+    `Open this survey file?\n\nIt replaces what's on screen now — ${points.length} readings and ${cellPoints.length} candidate spots.`
+  )) return;
+  restoreProfileBundle(d);
+  points.forEach((p) => { if (!p.level) p.level = activeLevel; });
+  savePoints();
+  renderPoints();
+  renderCoverageMap();
+  if (st) st.innerHTML = `✅ Imported survey — <b>${points.length}</b> readings restored.`;
 }
 function parseScanCSV(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());

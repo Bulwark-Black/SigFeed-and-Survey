@@ -499,10 +499,14 @@
   .spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;
     display:inline-block;animation:sp .7s linear infinite;vertical-align:middle}
   @keyframes sp{to{transform:rotate(360deg)}}
-  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#243354;
-    border:1px solid var(--accent);padding:14px 22px;border-radius:12px;font-size:16px;font-weight:600;
-    opacity:0;pointer-events:none;transition:.25s;z-index:20;max-width:90%}
+  /* z-index must stay above #floatDbm (60) — a save-failure message hidden behind the
+     dBm chip is the one message the surveyor cannot afford to miss */
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--surface-3);
+    border:1px solid var(--accent);padding:14px 22px;border-radius:var(--r-md);font-size:16px;font-weight:600;
+    opacity:0;pointer-events:none;transition:opacity var(--dur-2) var(--ease-out);z-index:80;max-width:90%;
+    box-shadow:var(--e-3);text-align:center}
   .toast.show{opacity:1}
+  .toast.warn{border-color:var(--fair);color:var(--fair);box-shadow:var(--e-3),0 0 0 1px var(--fair-line)}
   /* floating live dBm readout — only shown while plotting on the Coverage page */
   #floatDbm{position:fixed;right:20px;bottom:20px;z-index:60;display:none;
     min-width:150px;background:var(--surface-glass);backdrop-filter:blur(12px) saturate(140%);
@@ -521,6 +525,11 @@
     #floatDbm .fdbm{font-size:26px}
     #floatDbm .fword{margin-top:0}
     #floatDbm .fnet{margin-top:0;margin-left:auto;align-self:center;max-width:40vw}
+    /* the chip spans the full width down here, so whatever sits under it has to clear it —
+       otherwise it permanently covers the last ~60px of the page it's shown on.
+       It only ever appears on Coverage (updateFloatDbm gates on that), so only Coverage pads. */
+    #page-map{padding-bottom:80px}
+    .toast{bottom:78px}
   }
 </style>
 </head>
