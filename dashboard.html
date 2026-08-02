@@ -25,9 +25,15 @@
     --fair-soft:rgba(251,191,36,.16); --fair-line:rgba(251,191,36,.55);
     --poor-soft:rgba(248,113,113,.16); --poor-line:rgba(248,113,113,.55);
     --na-soft:rgba(124,138,166,.16); --na-line:rgba(124,138,166,.5);
-    --line:#263449; --line-soft:rgba(255,255,255,.06); --line-strong:#33445f;
+    /* card separation rests entirely on these: --surface-1 against the page is only 1.10:1,
+       so at low ambient contrast (a phone outdoors) the borders were doing all the work
+       at 1.38:1 and the layout dissolved. */
+    --line:#34455e; --line-soft:rgba(255,255,255,.06); --line-strong:#4a5f7f;
     --highlight:rgba(255,255,255,.055);
     --r-xs:6px; --r-sm:10px; --r-md:14px; --r-lg:18px; --r-xl:24px; --r-pill:999px;
+    /* one number for the sticky header's height — the sidebar pins against it in two places
+       and both offsets were eyeballed separately, so neither matched it */
+    --header-h:66px;
     --e-1:0 1px 2px rgba(0,0,0,.35);
     --e-2:0 2px 8px rgba(0,0,0,.35),inset 0 1px 0 var(--highlight);
     --e-3:0 8px 24px rgba(0,0,0,.45),inset 0 1px 0 var(--highlight);
@@ -42,7 +48,12 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg-grad) fixed;color:var(--ink);min-height:100vh;
     font:var(--fs-body)/1.55 var(--font-sans)}
-  header{display:flex;align-items:center;gap:14px;padding:14px 24px;
+  /* Keyboard focus. --e-focus was defined and never used, and the only two rules that touched
+     :focus removed the outline — so tabbing through the app showed nothing at all.
+     :focus-visible keeps it off for mouse clicks, which is why those rules existed. */
+  :focus-visible{outline:none;box-shadow:var(--e-focus);border-radius:var(--r-xs)}
+  .navitem:focus-visible,button:focus-visible,a:focus-visible{position:relative;z-index:1}
+  header{display:flex;align-items:center;gap:14px;padding:14px 24px;height:var(--header-h);
     background:var(--surface-glass);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);
     border-bottom:1px solid var(--line);box-shadow:inset 0 1px 0 var(--highlight);
     position:sticky;top:0;z-index:100}
@@ -128,7 +139,7 @@
   .rpthumb .rpx:hover{background:var(--poor)}
   /* left-nav layout */
   .layout{display:flex;max-width:1330px;margin:0 auto}
-  #sidebar{flex:none;width:224px;padding:20px 14px;position:sticky;top:62px;align-self:flex-start;display:flex;flex-direction:column;gap:3px}
+  #sidebar{flex:none;width:224px;padding:20px 14px;position:sticky;top:var(--header-h);align-self:flex-start;display:flex;flex-direction:column;gap:3px}
   .navitem{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:0;background:transparent;color:var(--muted);
     border-radius:var(--r-sm);padding:12px 14px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:all var(--dur-1) var(--ease-out)}
   .navitem .ni{font-size:17px;width:22px;text-align:center}
@@ -137,8 +148,17 @@
   #content{flex:1;min-width:0;padding:22px 26px;max-width:1080px}
   @media(max-width:860px){
     .layout{flex-direction:column}
-    #sidebar{position:sticky;top:0;z-index:20;flex-direction:row;overflow-x:auto;width:100%;padding:10px 12px;
-      background:var(--surface-glass);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);gap:6px}
+    /* sits BELOW the sticky header, not at the same top:0 — at equal offsets the nav
+       (z-index 20) scrolled underneath the header (z-index 100) and smeared through it */
+    #sidebar{position:sticky;top:var(--header-h);z-index:90;flex-direction:row;overflow-x:auto;width:100%;padding:10px 12px;
+      background:var(--surface-glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--line);gap:6px;
+      /* the strip is ~3x wider than a phone, so fade the right edge — otherwise Report,
+         Advanced and Guide sit off-screen with nothing to suggest it scrolls */
+      -webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);
+      mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+    #sidebar::-webkit-scrollbar{height:3px}
+    #sidebar::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:2px}
     .navitem{width:auto;white-space:nowrap;padding:9px 13px}
     #content{max-width:none;padding:16px}
   }
@@ -247,7 +267,7 @@
   .heatsel{background:var(--surface-2);border:1px solid var(--line-strong);color:var(--ink);border-radius:var(--r-sm);padding:8px 10px;font-size:13px;font-family:inherit;cursor:pointer}
   .heatlegend{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);flex-wrap:wrap}
   .heatlegend .lg{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:3px}
-  .heatlegend .gradbar{display:inline-block;width:90px;height:10px;border-radius:5px;background:linear-gradient(90deg,#f87171,#fb923c,#fbbf24,#a3e635,#34d399);margin:0 6px;vertical-align:-1px}
+  .heatlegend .gradbar{display:inline-block;width:90px;height:10px;border-radius:5px;background:linear-gradient(90deg,var(--poor),#fb923c,var(--fair),var(--good),var(--exc));margin:0 6px;vertical-align:-1px}
   .passpill{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;border-radius:999px;padding:5px 12px;border:1px solid var(--line-strong);background:var(--surface-2);color:var(--ink);white-space:nowrap}
   .passpill.hidden{display:none}
   .passpill .ppn{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -372,7 +392,7 @@
   .roombar{display:flex;gap:12px;flex-wrap:wrap}
   .roombar input{flex:1;min-width:200px;background:var(--panel2);border:2px solid var(--line);color:var(--ink);
     border-radius:14px;padding:18px 18px;font-size:20px;font-family:inherit}
-  .roombar input:focus{outline:none;border-color:var(--accent)}
+  .roombar input:focus{border-color:var(--accent)}
   .save-btn{background:var(--exc);color:var(--ink-on-status);font-size:20px;padding:0 30px;min-height:62px;transition:all var(--dur-1) var(--ease-out)}
   .save-btn:hover{filter:brightness(1.06);transform:translateY(-1px)}
   /* spots list */
@@ -391,8 +411,8 @@
   .ghost:hover{border-color:var(--accent-line);background:var(--surface-3)}
   .ghost.on{background:var(--accent);border-color:var(--accent);color:var(--ink-on-accent)}
   /* destructive actions read as risky, not as harmless ghosts */
-  .ghost.danger{color:#f87171;border-color:rgba(248,113,113,.38)}
-  .ghost.danger:hover{border-color:#f87171;background:rgba(248,113,113,.10)}
+  .ghost.danger{color:var(--poor);border-color:var(--poor-line)}
+  .ghost.danger:hover{border-color:var(--poor);background:var(--poor-soft)}
   /* field/touch: bigger tap targets on phones (44px+ min) */
   @media(max-width:860px){.modebtn,.ghost,.leveltab,.navitem{min-height:48px}}
   /* small caption above grouped button rows */
@@ -403,7 +423,7 @@
   .aerialrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
   .aerialrow #aerialAddr{flex:1;min-width:220px;background:var(--surface-2);border:1px solid var(--line-strong);
     color:var(--ink);border-radius:var(--r-sm);padding:12px 13px;font-size:15px;font-family:inherit}
-  .aerialrow #aerialAddr:focus{outline:none;border-color:var(--accent)}
+  .aerialrow #aerialAddr:focus{border-color:var(--accent)}
   .aerialrow .aerialfind{flex:0 0 auto;min-width:0}
   .aerialrow .aerialzoom{flex:0 0 auto;min-width:0;width:46px;justify-content:center;font-size:20px;font-weight:800;padding:10px 0}
   /* mark-my-GPS-spot affordance */
@@ -438,7 +458,8 @@
   .cellbadge .gsub{white-space:normal}
   /* phone-style 5-bar signal graphic */
   .bars{display:flex;align-items:flex-end;justify-content:center;gap:4px;height:34px;margin:2px 0 8px}
-  .bars i{width:9px;border-radius:2px;background:var(--line-strong);display:block;transition:background var(--dur-1) var(--ease-out)}
+  /* unlit bars need to read as bars, not as absent — at 1.77:1 "2 of 5" looked like "2 of 2" */
+  .bars i{width:9px;border-radius:2px;background:#54688a;display:block;transition:background var(--dur-1) var(--ease-out)}
   .bars i:nth-child(1){height:34%}
   .bars i:nth-child(2){height:52%}
   .bars i:nth-child(3){height:70%}
@@ -487,7 +508,8 @@
     border-radius:9px;padding:9px 11px;font-size:13px;font-family:inherit}
   .adv button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--ink);
     border-radius:9px;padding:9px 14px;font-size:13px;font-weight:600;font-family:inherit}
-  .adv button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* white on the teal accent is 1.71:1 — unreadable. --ink-on-accent exists for exactly this. */
+  .adv button.primary{background:var(--accent);border-color:var(--accent);color:var(--ink-on-accent)}
   .btnbar{display:flex;flex-wrap:wrap;gap:9px}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:13px}
   .kv b{color:var(--muted);font-weight:500}
@@ -558,6 +580,7 @@
     <button class="navitem" id="nav-gps" onclick="showPage('gps')"><span class="ni">📍</span><span>GPS Walk</span></button>
     <div class="navsec">Deliver</div>
     <button class="navitem" id="nav-report" onclick="showPage('report')"><span class="ni">📄</span><span>Report</span></button>
+    <div class="navsec">Tools</div>
     <button class="navitem" id="nav-advanced" onclick="showPage('advanced')"><span class="ni">⚙️</span><span>Advanced</span></button>
     <button class="navitem" id="nav-guide" onclick="showPage('guide')"><span class="ni">❓</span><span>Guide</span></button>
     <div class="side-status" id="sideStatus">
@@ -779,10 +802,10 @@
           <option value="gradient">Gradient</option>
           <option value="passfail">Pass / Fail</option>
         </select></label>
-        <select id="heatCmapSel" class="heatsel" onchange="setHeatColormap(this.value)" title="Color scheme for the gradient heatmap">
+        <select id="heatCmapSel" class="heatsel" onchange="setHeatColormap(this.value)" aria-label="Heatmap colour scheme" title="Colour scheme for the gradient heatmap. Red → Green is hard to read for red-green colour blindness — Viridis stays readable for everyone.">
           <option value="signal">Red → Green</option>
           <option value="turbo">Turbo</option>
-          <option value="viridis">Viridis</option>
+          <option value="viridis">Viridis (colour-blind safe)</option>
         </select>
         <select id="heatPreset" class="heatsel hidden" onchange="setHeatPreset(this.value)">
           <option value="web">Web browsing</option>

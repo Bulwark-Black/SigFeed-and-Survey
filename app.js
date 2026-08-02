@@ -71,7 +71,7 @@ let activeProfile = null; // id of the currently-loaded profile — its live dat
 
 /* ---------- ratings ---------- */
 function rate(signal, snr) {
-  if (signal == null) return { label: "—", cls: "na", word: "—", color: "#64748b" };
+  if (signal == null) return { label: "—", cls: "na", word: "—", color: "#7c8aa6" };   // = --na
   let r;
   if (signal >= -55) r = { label: "Excellent", cls: "exc", word: "EXCELLENT", color: "#34d399" };
   else if (signal >= -67) r = { label: "Good", cls: "good", word: "GOOD", color: "#a3e635" };
@@ -290,9 +290,21 @@ function showPage(name) {
   if (name === "siteplan") setSiteMode(siteMode); // sizes the canvas + restores mode UI
   if (name === "guide") renderGuide();
   if (name === "report") renderReportInsights();
+  // the gateway poll is a cellular-page affordance; it used to keep hammering the gateway
+  // for the rest of the session once started
+  if (name !== "cellular") stopCellAuto();
   // poll GPS while the GPS or Site Plan page is open, OR on the map page when there's an aerial to place onto
   if (name === "gps" || name === "siteplan" || (name === "map" && geoBounds)) startGpsPoll(); else stopGpsPoll();
   if (name === "map") renderYouAreHere(); // reflect the current fix immediately on arrival
+  // Last, because window.scrollTo above cancels an in-flight smooth scroll. On a phone the nav
+  // is a strip ~3x wider than the screen, so pulling the active item into view both answers
+  // "where am I" and reveals that the strip scrolls at all.
+  const navBar = $("sidebar");
+  if (nv && navBar && navBar.scrollWidth > navBar.clientWidth) {
+    // instant, not smooth: the page has just changed under it, and a smooth scroll here is
+    // both cancelled by the window.scrollTo above and unreliable inside a masked container
+    navBar.scrollLeft = nv.offsetLeft - navBar.clientWidth / 2 + nv.offsetWidth / 2;
+  }
 }
 
 /* ---------- live poll ---------- */
@@ -846,7 +858,22 @@ function analyzeInfra(aps) {
 }
 // cellular interpretation bands (3GPP-aligned rules of thumb, NOT a normative pass/fail standard)
 const CELL_BANDS = { rsrp: [[-80, "Excellent"], [-90, "Good"], [-100, "Fair"], [-110, "Poor"]], sinr: [[20, "Excellent"], [13, "Good"], [0, "Fair"]], rsrq: [[-10, "Excellent"], [-15, "Good"], [-20, "Fair"]] };
-const GRADE_COLOR = { Excellent: "#22c55e", Good: "#84cc16", Fair: "#f59e0b", Poor: "#ef4444" };
+// One grade colour per surface. `print` is tuned for the PDF's white page; `screen` for the
+// dark UI. These were the same set, so the print palette was rendering on the dashboard at
+// 2.69:1 for Critical — the most prominent number in the product, least readable exactly when
+// the news was worst. Both sets pass AA on the surface they are for.
+// Poor and Critical share a red on screen deliberately: both are failing grades, the badge
+// prints the word next to the number, and every second red that clears 4.5:1 on this
+// background reads *lighter* than the first — i.e. less severe, which is backwards.
+const GRADE_INK = {
+  print:  { Excellent: "#15803d", Good: "#3f8f13", Fair: "#b45309", Poor: "#dc2626", Critical: "#b91c1c" },
+  screen: { Excellent: "#34d399", Good: "#a3e635", Fair: "#fbbf24", Poor: "#f87171", Critical: "#f87171" },
+};
+// The signal ratings use the same four screen colours, so a chip on one page and a dot on
+// another can't disagree about what "Good" looks like.
+const GRADE_COLOR = { Excellent: "#34d399", Good: "#a3e635", Fair: "#fbbf24", Poor: "#f87171" };
+// Finding severity, one definition for every renderer.
+const SEVERITY_COLOR = { critical: "var(--poor)", warning: "var(--fair)", good: "var(--exc)", info: "var(--accent)" };
 const GRADE_RANK = { Excellent: 3, Good: 2, Fair: 1, Poor: 0 };
 function cellGrade(metric, v) {
   if (v == null || isNaN(v)) return null;
@@ -1495,15 +1522,19 @@ function setHeatMode(v) {
 }
 function setHeatPreset(v) { heatPreset = v; renderHeatUI(); renderCoverageMap(); }
 function setHeatColormap(v) { heatColormap = v; renderHeatUI(); renderCoverageMap(); }
+// What the letter inside each reading dot means. Spelling it out is what makes the marker's
+// second channel usable rather than mysterious.
+const DOT_KEY = `<span class="muted" style="display:block;margin-top:5px;font-size:11.5px">Dots: <b>E</b> excellent · <b>G</b> good · <b>W</b> weak · <b>D</b> dead zone</span>`;
+
 function renderHeatUI() {
   const el = $("heatLegend");
   if (!el) return;
   const M = METRICS[heatMetric];
   if (heatMode === "passfail") {
     const t = M.th[heatPreset];
-    el.innerHTML = `<span class="lg" style="background:#34d399"></span>Pass ≥${t[0]} <span class="lg" style="background:#fbbf24"></span>Marginal <span class="lg" style="background:#f87171"></span>Fail &lt;${t[1]} <span class="muted">${M.unit}</span>`;
+    el.innerHTML = `<span class="lg" style="background:var(--exc)"></span>Pass ≥${t[0]} <span class="lg" style="background:var(--fair)"></span>Marginal <span class="lg" style="background:var(--poor)"></span>Fail &lt;${t[1]} <span class="muted">${M.unit}</span>` + DOT_KEY;
   } else {
-    el.innerHTML = `<span class="muted">${M.lo}</span><span class="gradbar" style="background:${colormapCss()}"></span><span class="muted">${M.hi} ${M.unit}</span>`;
+    el.innerHTML = `<span class="muted">${M.lo}</span><span class="gradbar" style="background:${colormapCss()}"></span><span class="muted">${M.hi} ${M.unit}</span>` + DOT_KEY;
   }
 }
 
@@ -1569,7 +1600,13 @@ function renderCoverageMap() {
   const mapped = mappedPoints(points);
   $("dotsLayer").innerHTML = mapped
     .map((p) => {
-      return `<div title="${esc(p.location)} · ${p.signal} dBm" style="position:absolute;left:${(p.mapX * 100).toFixed(1)}%;top:${(p.mapY * 100).toFixed(1)}%;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:${pointColor(p)};border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.7)"></div>`;
+      // The initial (E/G/W/D) is a second channel alongside the colour. Green, lime and amber
+      // collapse to nearly the same shade under red-green colour blindness — Good vs Fair
+      // measured 1.02:1 after simulation — and that pair is the -67 dBm "reliable vs
+      // borderline" line, the most decision-relevant distinction on the map.
+      const r = rate(p.signal, p.snr);
+      const initial = { exc: "E", good: "G", fair: "W", poor: "D", na: "?" }[r.cls] || "?";
+      return `<div title="${esc(p.location)} · ${p.signal} dBm · ${esc(r.label)}" style="position:absolute;left:${(p.mapX * 100).toFixed(1)}%;top:${(p.mapY * 100).toFixed(1)}%;transform:translate(-50%,-50%);width:17px;height:17px;border-radius:50%;background:${pointColor(p)};border:2px solid #fff;box-shadow:0 0 4px rgba(0,0,0,.7);font:800 9px/13px var(--font-sans);color:#0b1220;text-align:center">${initial}</div>`;
     })
     .join("") +
     apMarks
@@ -1973,6 +2010,13 @@ function generateMapDataURL() {
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#fff";
     ctx.stroke();
+    // second channel for the printed map — see the note on the live dots
+    const r = rate(p.signal, p.snr);
+    const initial = { exc: "E", good: "G", fair: "W", poor: "D", na: "?" }[r.cls] || "?";
+    ctx.font = "800 " + Math.max(8, Math.round(rad * 1.25)) + "px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#0b1220";
+    ctx.fillText(initial, x, y + 0.5);
   });
   if (perimeter.length >= 2) { perimPath(ctx, W, H); ctx.strokeStyle = "#2563eb"; ctx.lineWidth = 3; ctx.stroke(); }
   drawApMarks(ctx, W, H);
@@ -2735,6 +2779,10 @@ function generateSchematicDataURL() {
     const x = p.mapX * RW, y = p.mapY * RH;
     ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = pointColor(p); ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.stroke();
+    const r = rate(p.signal, p.snr);
+    ctx.font = "800 9px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#0b1220";
+    ctx.fillText({ exc: "E", good: "G", fair: "W", poor: "D", na: "?" }[r.cls] || "?", x, y + 0.5);
   });
   if (perimeter.length >= 2) { perimPath(ctx, RW, RH); ctx.strokeStyle = "#2563eb"; ctx.lineWidth = 3; ctx.stroke(); }
   drawApMarks(ctx, RW, RH);
@@ -3329,7 +3377,7 @@ function computeInsights(pts, site, env) {
   if (subs.length) { const tw = subs.reduce((a, s) => a + s.w, 0); score = Math.round(subs.reduce((a, s) => a + s.w * s.val, 0) / tw); }
   if (dead.length) score = Math.min(score, 69);
   if ((sig.length && dead.length / sig.length >= 0.25) || (cellPoints.length && bestSinr != null && bestSinr < 0)) score = Math.min(score, 49);
-  const grade = score >= 90 ? ["Excellent", "#15803d"] : score >= 75 ? ["Good", "#3f8f13"] : score >= 60 ? ["Fair", "#b45309"] : score >= 40 ? ["Poor", "#dc2626"] : ["Critical", "#b91c1c"];
+  const grade = score >= 90 ? ["Excellent"] : score >= 75 ? ["Good"] : score >= 60 ? ["Fair"] : score >= 40 ? ["Poor"] : ["Critical"];
 
   if (pts.length >= 1 && pts.length < 4) F.push({ severity: "info", text: `Only ${pts.length} reading${pts.length > 1 ? "s" : ""} captured — conclusions are provisional until more rooms are sampled.`, rec: "Aim for about one reading per 400–500 sq ft plus the corners farthest from the router." });
   // Area has to be measured over the readings that actually sit on the map — `sig` includes
@@ -3368,7 +3416,7 @@ function computeInsights(pts, site, env) {
   summary += (sorted.length && sorted[0].severity !== "good" && sorted[0].severity !== "info") ? stripTags(sorted[0].text) + " " : `Coverage held up across all ${distinctRooms(pts)} rooms surveyed. `;
   const firstRec = sorted.find((f) => f.rec && (f.severity === "critical" || f.severity === "warning"));
   summary += firstRec ? stripTags(firstRec.rec.split(".")[0]) + "." : "No changes recommended.";
-  return { score, grade: grade[0], gradeColor: grade[1], subs, findings: sorted, summary };
+  return { score, grade: grade[0], gradeColor: GRADE_INK.print[grade[0]], gradeInk: GRADE_INK.screen[grade[0]], subs, findings: sorted, summary };
 }
 
 function genReport() {
@@ -3520,7 +3568,8 @@ function buildReport(site, pts) {
       ? `<h2>Coverage Heatmap</h2><img class="hm" src="${coverImg}">${cur ? floorFigures(cur) : ""}` : "";
   }
   if (heatmapSection) {
-    heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label} — Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}) — weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>`;
+    heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label} — Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}) — weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>
+      <p class="legend">Each reading is marked <b>E</b> excellent, <b>G</b> good, <b>W</b> weak or <b>D</b> dead zone, so the map reads correctly in greyscale and with colour blindness.</p>`;
     if (levels.some((l) => l.geo)) heatmapSection += `<p class="legend" style="opacity:.7;font-size:11px">Imagery © Esri — GPS-located readings.</p>`;
   }
 
@@ -4219,12 +4268,12 @@ function renderHome() {
   const ins = computeInsights(points, site, surveyEnv);
   $("mcScore").textContent = ins.score;
   $("mcGrade").textContent = ins.grade;
-  $("mcRing").style.setProperty("--rc", ins.gradeColor);
+  $("mcRing").style.setProperty("--rc", ins.gradeInk);   // dark UI → screen palette, not the PDF's
   $("mcRing").style.setProperty("--pct", ins.score);
   $("mcTitle").textContent = (site.f_client || "This survey") + " · " + ins.grade;
   $("mcSummary").innerHTML = ins.summary;
   $("mcFindings").innerHTML = ins.findings.slice(0, 3).map((f) => {
-    const fc = { critical: "var(--poor)", warning: "var(--fair)", good: "var(--exc)", info: "var(--accent)" }[f.severity];
+    const fc = SEVERITY_COLOR[f.severity];
     const loc = f.loc ? `<button class="rilocate" onclick="locateOnMap(${(+f.loc.x).toFixed(4)},${(+f.loc.y).toFixed(4)},'${esc(f.loc.level || "")}')">📍 Locate</button>` : "";
     return `<div class="mc-find" style="--fc:${fc}"><div class="mc-find-sev">${f.severity}${loc}</div><div>${f.text}</div></div>`;
   }).join("");
@@ -4250,11 +4299,11 @@ function renderReportInsights() {
   const site = {}; SITE_FIELDS.forEach((f) => (site[f] = $(f) ? $(f).value : ""));
   const ins = computeInsights(points, site, surveyEnv);
   const cards = ins.findings.slice(0, 5).map((f) => {
-    const fc = { critical: "#f87171", warning: "#fbbf24", good: "#34d399", info: "#38bdf8" }[f.severity];
+    const fc = SEVERITY_COLOR[f.severity];
     const loc = f.loc ? `<button class="rilocate" onclick="locateOnMap(${(+f.loc.x).toFixed(4)},${(+f.loc.y).toFixed(4)},'${esc(f.loc.level || "")}')">📍 Locate</button>` : "";
     return `<div class="rifind" style="--fc:${fc}"><div class="rsev">${f.severity}${loc}</div>${f.text}${f.rec ? `<div class="muted" style="margin-top:4px;font-size:12.5px"><b>→</b> ${f.rec}</div>` : ""}</div>`;
   }).join("");
-  el.innerHTML = `<div class="risum"><div class="rbadge" style="--rc:${ins.gradeColor}"><div class="rn">${ins.score}</div><div class="rg">${ins.grade}</div></div>
+  el.innerHTML = `<div class="risum"><div class="rbadge" style="--rc:${ins.gradeInk}"><div class="rn">${ins.score}</div><div class="rg">${ins.grade}</div></div>
     <div style="font-size:14px;line-height:1.5">${ins.summary}</div></div>${cards}`;
 }
 
