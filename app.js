@@ -192,42 +192,100 @@ function animateSpeedNeedle(mbps, max) {
 
 // Live-page speed test — SAME /api/quality endpoint as runQuality()/runCellSpeed(), own button+readout.
 // Needle points to DOWNLOAD (the headline). Auto-scales the dial, then sweeps the needle.
+// Follow the live throughput the server is reading off networkQuality, so the needle tracks
+// the real measurement while it climbs instead of sitting at zero and then jumping. The dial's
+// full-scale value grows with the reading — a 900 Mbps line would otherwise peg the needle for
+// the whole run against a 50 Mbps default.
+function trackSpeed(mbps) {
+  if (mbps > speedMax * 0.98) {
+    const grown = niceMax(mbps);
+    if (grown !== speedMax) { speedMax = grown; buildSpeedTicks(speedMax); }
+  }
+  updateSpeedGauge(mbps, speedMax);
+}
+
+function setSpeedFields(d) {
+  $("stDown").textContent = (d.download_mbps ?? "—") + " Mbps";
+  $("stUp").textContent = (d.upload_mbps ?? "—") + " Mbps";
+  $("stLat").textContent = d.base_rtt_ms != null ? d.base_rtt_ms + " ms" : "—";
+  $("stRpm").textContent = d.responsiveness_rpm != null ? Math.round(d.responsiveness_rpm) + " RPM" : "—";
+}
+
+function resetSpeedUI(text) {
+  updateSpeedGauge(0, speedMax);
+  $("speedBig").textContent = text;
+  if ($("speedSub")) $("speedSub").textContent = "Download speed";
+  ["stDown", "stUp", "stLat", "stRpm"].forEach((i) => { if ($(i)) $(i).textContent = "—"; });
+}
+
+let speedPolling = false;
 async function runSpeedTest() {
   const b = $("btnSpeedTest");
-  if (!b) return;
+  if (!b || speedPolling) return;
   b.disabled = true;
-  b.innerHTML = '<span class="spin"></span>&nbsp; Testing… (~20s)';
-  // reset to a testing state: needle at 0, dashes on all readouts
+  b.innerHTML = '<span class="spin"></span>&nbsp; Starting…';
+  speedMax = 100;
+  buildSpeedTicks(speedMax);
   updateSpeedGauge(0, speedMax);
   $("speedBig").textContent = "…";
   ["stDown", "stUp", "stLat", "stRpm"].forEach((i) => { if ($(i)) $(i).textContent = "…"; });
+
+  const finish = (label) => {
+    speedPolling = false;
+    b.disabled = false;
+    b.innerHTML = "⚡ Speed Test";
+    if (label) $("speedBig").textContent = label;
+  };
+
   try {
-    const d = await api("/api/quality");
-    if (d.ok) {
-      const dl = d.download_mbps;
-      speedMax = niceMax(dl != null ? dl : 0);
-      buildSpeedTicks(speedMax);
-      animateSpeedNeedle(dl, speedMax);
-      $("speedBig").textContent = (dl != null ? Math.round(dl) : "—") + " Mbps";
-      $("stDown").textContent = (dl ?? "—") + " Mbps";
-      $("stUp").textContent = (d.upload_mbps ?? "—") + " Mbps";
-      $("stLat").textContent = d.base_rtt_ms != null ? d.base_rtt_ms + " ms" : "—";
-      $("stRpm").textContent = d.responsiveness_rpm != null ? Math.round(d.responsiveness_rpm) + " RPM" : "—";
-      toast(`↓${dl} / ↑${d.upload_mbps} Mbps`);
-    } else {
-      updateSpeedGauge(0, speedMax);
-      $("speedBig").textContent = "—";
-      ["stDown", "stUp", "stLat", "stRpm"].forEach((i) => { if ($(i)) $(i).textContent = "—"; });
-      toast("Speed test failed: " + (d.error || ""));
-    }
+    await api("/api/quality/start");
   } catch (e) {
-    updateSpeedGauge(0, speedMax);
-    $("speedBig").textContent = "—";
-    ["stDown", "stUp", "stLat", "stRpm"].forEach((i) => { if ($(i)) $(i).textContent = "—"; });
-    toast("Speed test failed");
+    resetSpeedUI("—");
+    finish();
+    return toast("Couldn't start the speed test — is the server running?");
   }
-  b.disabled = false;
-  b.innerHTML = "⚡ Speed Test";
+
+  speedPolling = true;
+  let lastPhase = "";
+  const poll = async () => {
+    let s;
+    try { s = await api("/api/quality/progress"); }
+    catch (e) { resetSpeedUI("—"); finish(); return toast("Lost contact with the speed test"); }
+
+    if (s.phase === "error") { resetSpeedUI("—"); finish(); return toast("Speed test failed: " + (s.error || "")); }
+
+    if (s.phase === "download" || s.phase === "upload") {
+      const live = s.phase === "upload" ? s.up : s.down;
+      trackSpeed(live);
+      $("speedBig").textContent = Math.round(live) + " Mbps";
+      if (s.phase !== lastPhase) {
+        lastPhase = s.phase;
+        b.innerHTML = s.phase === "download"
+          ? '<span class="spin"></span>&nbsp; Download…'
+          : '<span class="spin"></span>&nbsp; Upload…';
+        // the caption has to follow the needle — it read "Download speed" while the dial was
+        // showing the upload figure, which is worse than not labelling it at all
+        if ($("speedSub")) $("speedSub").textContent = s.phase === "download" ? "Download — measuring…" : "Upload — measuring…";
+      }
+      // fill each direction in as its half completes, so the numbers appear as they're measured
+      if (s.down > 0) $("stDown").textContent = s.down.toFixed(1) + " Mbps";
+      if (s.up > 0) $("stUp").textContent = s.up.toFixed(1) + " Mbps";
+    }
+
+    if (s.phase === "done" && s.result) {
+      const d = s.result, dl = d.download_mbps;
+      speedMax = niceMax(Math.max(dl || 0, d.upload_mbps || 0));
+      buildSpeedTicks(speedMax);
+      animateSpeedNeedle(dl, speedMax);      // settle on the headline download figure
+      if ($("speedSub")) $("speedSub").textContent = "Download speed";
+      setSpeedFields(d);
+      finish((dl != null ? Math.round(dl) : "—") + " Mbps");
+      return toast(`↓${dl} / ↑${d.upload_mbps} Mbps`);
+    }
+    if (!s.running && s.phase !== "done") { resetSpeedUI("—"); finish(); return toast("Speed test stopped"); }
+    setTimeout(poll, 250);
+  };
+  poll();
 }
 
 /* ---------- toast ---------- */
