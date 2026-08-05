@@ -23,6 +23,14 @@ Then open <http://127.0.0.1:8765>. Press `Ctrl+C` to stop.
 macOS may offer to install Apple's Command Line Tools the first time. Accept it,
 or run `xcode-select --install` first.
 
+## Checks
+
+```bash
+./check.sh    # syntax, dangling DOM ids, dead inline handlers
+./test.sh     # coordinate maths, KMZ writer, server logic, auth
+./test.sh --net   # also re-verifies Esri and NAIP against the live services
+```
+
 **From your phone:** on the same Wi‑Fi, open `http://<your-mac's-IP>:8765` — this
 is what powers the walk-the-property GPS feature. macOS will ask once whether to
 allow incoming connections; that's the phone link, so allow it.
@@ -34,7 +42,7 @@ allow incoming connections; that's the phone link, so allow it.
 | **Live** | Instant signal gauge + one-tap speed test (download / upload / responsiveness) where you're standing. |
 | **Coverage** | Pick a survey type, build a base map (draw / upload / auto-layout / aerial-from-address), walk and tap readings, and get a live heatmap with gradient, pass/fail, and labeled contour lines. |
 | **Cellular** | Aim a home cellular gateway / antenna by RSRP / SINR, with live bars and a speed test. |
-| **GPS** | Stream your phone's GPS to the Mac, drop points and property corners as you walk, export a boundary to Google Earth (`.kml`). |
+| **GPS** | Stream your phone's GPS to the Mac, drop points and property corners as you walk, export the survey to Google Earth (`.kmz`). |
 | **Report** | Client details, a 0–100 coverage score with automated findings, site photos, and a one-click PDF. Save / export / re-open surveys here. |
 | **Advanced** | Live network internals, NetSpot / WiFi Explorer launchers, nearby-networks table. |
 | **Guide** | "Which tool when" + a plain-English glossary. |
@@ -43,7 +51,7 @@ allow incoming connections; that's the phone link, so allow it.
 
 - **`.json`** — the full raw survey; re-open to resume or re-print (your master copy).
 - **`.csv`** — every reading as a spreadsheet row.
-- **`.kml`** — GPS boundary + points for Google Earth.
+- **`.kmz`** — coverage heatmap overlay, readings, boundary and routers for Google Earth.
 - **PDF** — the formatted client report.
 
 ## Rating scale (RSSI)

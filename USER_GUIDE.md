@@ -198,7 +198,7 @@ aerial, and you drop points and corners as you walk.
   (You can also just tap the map.)
 - **Corners** — drop the property corners as you reach them; connect them to
   trace the boundary.
-- **🌍 Export KML** — saves the boundary + points as a `.kml` you can open in
+- **🌍 Export KMZ** — saves the coverage heatmap, readings, boundary and routers as a `.kmz` you can open in
   **Google Earth** or hand to the client.
 
 > Smaller GPS accuracy (in meters) = more exact. If accuracy is poor, step into
@@ -265,7 +265,7 @@ Everything you can hand off, from the Report page:
 |--------|------|-----------|
 | ⬇︎ **Save survey** | `.json` | The complete raw survey. Re-open it later to resume or re-print — this is your master copy. |
 | 📊 **Export data** | `.csv` | Every reading as a spreadsheet row (room, floor, band, channel, RSSI, SNR, rate, rating, GPS coords…) for your own records or a client who wants the raw numbers. |
-| 🌍 **Google Earth** | `.kml` | The GPS boundary + points, opens in Google Earth. |
+| 🌍 **Google Earth** | `.kmz` | Coverage heatmap overlay, readings, boundary and routers. |
 | 🖨 **Field run sheet** | print | A printable on-site checklist. |
 | ⬆︎ **Open survey file** | — | Load a saved `.json` back in to continue or re-report. |
 | 🗑 **Start over** | — | Clear everything and begin fresh. |

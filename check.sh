@@ -3,6 +3,8 @@
 #   ./check.sh
 # Catches the failure modes a no-build project can't otherwise catch: a syntax error
 # in app.js, a $("id") that no longer exists, and an onclick pointing at a deleted function.
+# For wrong ANSWERS rather than wrong syntax — coordinate maths, the KMZ writer, auth — see
+# ./test.sh.
 cd "$(dirname "$0")" || exit 1
 fail=0
 

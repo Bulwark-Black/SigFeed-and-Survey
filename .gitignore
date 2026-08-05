@@ -4,3 +4,6 @@
 # Python
 __pycache__/
 *.pyc
+
+# Live Google Earth feed token (per-machine secret, 0600)
+.wifi-survey-live-token
