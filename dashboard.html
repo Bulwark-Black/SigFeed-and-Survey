@@ -440,7 +440,7 @@
     color:var(--ink);border-radius:var(--r-sm);padding:12px 13px;font-size:15px;font-family:inherit}
   .aerialrow #aerialAddr:focus{border-color:var(--accent)}
   .aerialrow .aerialfind{flex:0 0 auto;min-width:0}
-  .aerialrow .aerialzoom{flex:0 0 auto;min-width:0;width:46px;justify-content:center;font-size:20px;font-weight:800;padding:10px 0}
+  .aerialzoom{flex:0 0 auto;min-width:0;width:46px;justify-content:center;font-size:20px;font-weight:800;padding:10px 0}
   /* mark-my-GPS-spot affordance */
   #gpsSpotBar .gpsspot,#perimBar .gpsspot{background:var(--accent);border-color:var(--accent);color:var(--ink-on-accent);font-weight:700}
   #gpsSpotBar .gpsspot:hover,#perimBar .gpsspot:hover{filter:brightness(1.06)}
@@ -650,7 +650,7 @@
       <button class="btn-primary" onclick="genReport()">📄 Generate report</button>
       <button class="btn-ghost2" onclick="exportJSON()">⬇︎ .json</button>
       <button class="btn-ghost2" onclick="exportCSV()">📊 .csv</button>
-      <button class="btn-ghost2" onclick="exportKML()">🌍 .kml</button>
+      <button class="btn-ghost2" onclick="exportKML()">🌍 .kmz</button>
     </div>
   </div>
 </div>
@@ -779,11 +779,17 @@
         <input id="aerialAddr" type="text" placeholder="street #, street, city, ST ZIP  —  e.g. 1600 Amphitheatre Pkwy, Mountain View, CA 94043" autocomplete="off"
                onkeydown="if(event.key==='Enter')buildAerial()">
         <button class="ghost aerialfind" id="btnAerial" onclick="buildAerial()">🔎 Find</button>
-        <button class="ghost aerialzoom" title="Wider view" onclick="zoomAerial(-1)">−</button>
-        <button class="ghost aerialzoom" title="Closer view" onclick="zoomAerial(1)">＋</button>
+        <button class="ghost aerialfind" id="btnNaip" onclick="buildNaip()" title="USDA NAIP — public-domain US farm-survey imagery, flown in summer">🌾 NAIP</button>
+        <button class="ghost aerialfind" id="btnEarth" onclick="buildFromEarth()" title="Move Google Earth Pro to this address and use its picture as the base map">🌍 Google Earth</button>
+        <select id="earthSpan" title="How much land the picture should cover">
+          <option value="91">~300 ft across</option>
+          <option value="230" selected>~750 ft across</option>
+          <option value="400">~1300 ft across</option>
+          <option value="700">~2300 ft across</option>
+        </select>
       </div>
       <div id="aerialHint" class="hint muted hidden" style="margin-top:8px;font-size:12.5px">
-        <b>Format:</b> street number + street, city, state, ZIP — e.g. <b>1600 Amphitheatre Pkwy, Mountain View, CA 94043</b>. Include the <b>city and state</b> (and ZIP if you have it) so it's found reliably — a bare street name often won't match. A place name works too (e.g. <b>"Lincoln High School, Portland OR"</b>).<br>Tap <b>Find</b> and the satellite image loads as your base map — then walk the property and tap <b>📍 Mark my GPS spot</b> (or tap the map). Use <b>−／＋</b> for a wider or closer view. <span class="muted">Imagery © Esri.</span>
+        <b>Format:</b> street number + street, city, state, ZIP — e.g. <b>1600 Amphitheatre Pkwy, Mountain View, CA 94043</b>. Include the <b>city and state</b> (and ZIP if you have it) so it's found reliably — a bare street name often won't match. A place name works too (e.g. <b>"Lincoln High School, Portland OR"</b>).<br>Tap <b>Find</b> and the satellite image loads as your base map — then walk the property and tap <b>📍 Mark my GPS spot</b> (or tap the map). Use <b>−／＋</b> for a wider or closer view. <span class="muted">Imagery source: Esri, Vantor, Earthstar Geographics, and the GIS User Community.</span>
       </div>
       <input type="file" id="planFile" accept="image/*" style="display:none" onchange="loadFloorPlan(event)">
       <div id="autoLayoutBox" class="hidden" data-st="autolayout" style="margin-top:14px">
@@ -864,6 +870,13 @@
         <button class="ghost" onclick="undoMapPoint()">↩︎ Undo dot</button>
         <button class="ghost" onclick="resetPlan()">🖼 Change plan</button>
         <span id="scalePill" class="scalepill hidden"></span>
+      </div>
+      <!-- Controls that act on an EXISTING base map live here, not in #planEmpty — that whole
+           block is hidden the moment a base map loads, which is what left −／＋ unreachable. -->
+      <div id="aerialBar" class="subrow hidden" style="justify-content:flex-start">
+        <button class="ghost aerialzoom" id="btnZoomOut" title="Wider view" onclick="zoomAerial(-1)">−</button>
+        <button class="ghost aerialzoom" id="btnZoomIn" title="Closer view" onclick="zoomAerial(1)">＋</button>
+        <span id="aerialSrc" class="hint muted" style="font-size:12.5px;align-self:center"></span>
       </div>
       <div id="gpsSpotBar" class="subrow hidden" data-st="gps" style="justify-content:flex-start">
         <button class="ghost gpsspot" onclick="markGpsSpot()">📍 Mark my GPS spot</button>
@@ -993,8 +1006,13 @@
     <div class="subrow">
       <button class="ghost" onclick="exportJSON()" title="Full survey, reload it later or share with another surveyor">⬇︎ Save survey (.json)</button>
       <button class="ghost" onclick="exportCSV()" title="Spreadsheet of every reading — opens in Excel / Numbers / Sheets">📊 Export data (.csv)</button>
-      <button class="ghost" onclick="exportKML()" title="Points + boundary for Google Earth Pro / Google Maps">🌍 Google Earth (.kml)</button>
+      <button class="ghost" onclick="exportKML()" title="Coverage heatmap, readings, boundary and routers for Google Earth Pro">🌍 Google Earth (.kmz)</button>
+      <button class="ghost" id="btnLive" onclick="toggleLiveEarth()" title="Open Google Earth Pro and keep it updated as you walk the property">🛰 Live in Google Earth</button>
       <button class="ghost" onclick="window.open('/run-sheet.html','_blank')" title="Printable on-site field checklist">🖨 Field run sheet</button>
+      <div id="liveHint" class="hint muted hidden" style="flex-basis:100%;font-size:12.5px;margin-top:6px">
+        <b>Colour looking patchy under trees?</b> Google Earth draws its 3D trees on top of it. In Google Earth's <b>Layers</b> panel (bottom left), untick <b>3D Buildings</b> and the colour fills in.<br>
+        <b>Seeing everything twice?</b> Google Earth is holding a survey from an earlier session. In <b>Temporary Places</b>, delete the older <b>WiFi Survey — live coverage</b> entries.
+      </div>
     </div>
     <div id="storageBar" class="storagebar"></div>
     <div class="rowcap">Load / reset</div>

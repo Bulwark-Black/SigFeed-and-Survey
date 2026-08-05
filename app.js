@@ -342,6 +342,10 @@ function store(key, value) {
 // The server injects this run's key into the page it serves; a cross-origin page can't read
 // that response, so it can't call the API on the technician's behalf.
 const API_KEY = (document.querySelector('meta[name="survey-key"]') || {}).content || "";
+// Separate, persistent credential for the live Google Earth feed. Earth holds its NetworkLink
+// across server restarts, so anything it fetches must be addressed with a token that outlives
+// the process — API_KEY is regenerated every run and would silently 403 into a frozen overlay.
+const LIVE_TOKEN = (document.querySelector('meta[name="live-token"]') || {}).content || "";
 
 function apiUrl(path) {
   if (!API_KEY) return path;
@@ -1266,7 +1270,13 @@ function idwSamples(pts, get) {
     .filter((p) => p.s != null && !isNaN(p.s) && Number.isFinite(p.x) && Number.isFinite(p.y));
 }
 
-function buildHeatCanvas(pts, gw, gh) {
+// `ar` is the map's TRUE height/width in feet — pass mapAspect(). Distance falloff has to be
+// measured on the ground, not in canvas pixels: every other consumer of the grid (drawContours,
+// requirementStats, drawRequirementOverlay, holeAreaSqft) already uses mapAspect(), and this one
+// used the pixel aspect instead. The two agree only while the base map is square, which every
+// Esri aerial is (1024×1024) and no Google Earth capture is — so the wash would have been drawn
+// against a differently-stretched field than the pass rate printed beside it in the same report.
+function buildHeatCanvas(pts, gw, gh, ar) {
   const M = METRICS[heatMetric];
   const c = document.createElement("canvas");
   c.width = gw; c.height = gh;
@@ -1274,7 +1284,7 @@ function buildHeatCanvas(pts, gw, gh) {
   const im = ctx.createImageData(gw, gh), d = im.data;
   const P = idwSamples(pts, M.get);
   if (!P.length) { ctx.putImageData(im, 0, 0); return c; }
-  const aspect = gh / gw;                       // map height as a fraction of its width
+  const aspect = (ar != null ? ar : gh / gw);   // map height as a fraction of its width
   const twoSig2 = 2 * HEAT_FADE * HEAT_FADE;
   for (let y = 0; y < gh; y++) {
     const fy = gh > 1 ? y / (gh - 1) : 0;
@@ -1790,7 +1800,7 @@ function renderCoverageMap() {
     const gw = 200, gh = Math.max(1, Math.round((200 * ch) / cw));
     ctx.imageSmoothingEnabled = true;
     ctx.globalAlpha = 0.6;
-    ctx.drawImage(buildHeatCanvas(mapped, gw, gh), 0, 0, cw, ch);
+    ctx.drawImage(buildHeatCanvas(mapped, gw, gh, mapAspect()), 0, 0, cw, ch);
     if (showContours) drawContours(ctx, cw, ch, mapped);
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -1872,6 +1882,186 @@ function tile2lat(yt, z) {
 
 let lastAerial = null;   // {lat, lon, z} — remembers the last geocoded center so zoom +/- can rebuild
 
+const AERIAL_TILES = 4;   // composed aerial is AERIAL_TILES² tiles (4×4 = 1024px)
+
+// Geo-bounds the composed image WOULD have at this center and zoom. Pure math, no network —
+// so zoomAerial can work out what a zoom would do to the readings before committing to it.
+function aerialBounds(lat, lon, z) {
+  z = Math.max(1, Math.min(21, Math.round(z)));
+  const n = AERIAL_TILES;
+  const x0f = mercWorldX(lon, z) - n / 2, y0f = mercWorldY(lat, z) - n / 2;
+  return {
+    west:  tile2lon(x0f, z),
+    east:  tile2lon(x0f + n, z),
+    north: tile2lat(y0f, z),
+    south: tile2lat(y0f + n, z),
+    z: z,
+  };
+}
+
+// A [0,1] fraction of one aerial → the same patch of ground as a fraction of another.
+// Deliberately does NOT clamp, unlike gpsToMap: a result outside [0,1] is the useful
+// answer — it means that reading falls off the edge of the new frame.
+function reprojectFrac(x, y, fromGeo, toGeo) {
+  const ll = mapToLatLonIn(fromGeo, x, y);
+  if (!ll) return null;
+  const z = toGeo.z;
+  const x0 = mercWorldX(toGeo.west, z), nx = mercWorldX(toGeo.east, z) - x0;
+  const y0 = mercWorldY(toGeo.north, z), ny = mercWorldY(toGeo.south, z) - y0;
+  return { x: (mercWorldX(ll.lon, z) - x0) / nx, y: (mercWorldY(ll.lat, z) - y0) / ny };
+}
+
+// Make a georeferenced image THE base map for this level, whatever produced it. Every source —
+// Esri tiles, a Google Earth capture — funnels through here so they can't drift apart.
+//
+// `meta` is what the source needs to rebuild or replace this frame later; it must carry a
+// `source` so zoomAerial knows whether there's a tile ladder to walk.
+//
+// Order below is load-bearing. setFloorPlan is not a passive setter: it saves the level and kicks
+// off three renderCoverageMap chains, and renderCoverageMap reaches geoBounds through mapAspect()
+// → getScale(). Set the georeference first or the heat grid builds at the image's pixel aspect
+// instead of its true feet aspect, the "Set scale" button un-hides on a map that already has GPS
+// scale, and a level holding an un-georeferenced image can get persisted.
+function adoptAerial(dataUrl, bounds, meta) {
+  const finite = (v) => typeof v === "number" && isFinite(v);
+  // z is not decorative: mercWorldX/Y raise 2 to it, and Math.pow(2, undefined) is NaN, which
+  // spreads into every IDW cell a NaN reading touches. z:null would quietly pass as 2^0=1.
+  if (!bounds || !["west", "east", "north", "south", "z"].every((k) => finite(bounds[k]))
+      || bounds.west >= bounds.east || bounds.north <= bounds.south) {
+    warn("That base map has no usable position data — not loading it.");
+    return { ok: false, saved: false };
+  }
+
+  geoBounds = bounds;
+  // An aerial carries true scale, so any manual ruler left over from an uploaded plan is now
+  // dead weight — and getScale() prefers geoBounds anyway, so a stale cal would sit there
+  // looking authoritative while being ignored. loadFloorPlan already clears these; this didn't.
+  calibration = null; calTemp = { a: null, b: null };
+  lastAerial = meta || null;
+  const L = curLevel();
+  if (L) { L.geo = bounds; L.aerial = lastAerial; L.cal = null; }
+
+  setFloorPlan(dataUrl);
+  const saved = saveLevels();
+  showGpsSpotBtn();
+  showAerialBar();
+  renderStorageBar();        // the single largest write in the app; show what it cost
+  return { ok: true, saved };
+}
+
+/* ---------- Google Earth Pro capture ---------- */
+// How far a reading can sit from where it really is, in feet. Driven almost entirely by relief:
+// tall trees and buildings lean outward from the centre of a nadir photo, so the error is real
+// but concentrated around tall things and near the frame edges.
+const EARTH_ACC_EXACT_FT = 5;     // below this the base map isn't the limiting error — GPS is
+const EARTH_ACC_NOTE_FT  = 25;    // above this, say the number out loud
+const EARTH_ACC_STOP_FT  = 82;    // above this a reading can land on the neighbouring parcel
+
+function mToFt(m) { return m * 3.28084; }
+
+// Shrink a capture before it goes into localStorage. Scales uniformly — the bounds describe the
+// whole frame, so any change to the pixel aspect would desync the image from its georeference.
+function downscaleCapture(dataUrl, maxW) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxW / img.naturalWidth);
+      if (scale === 1) return resolve(dataUrl);
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.naturalWidth * scale);
+      c.height = Math.round(img.naturalHeight * scale);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+// Drive Google Earth Pro to a nadir view of (lat,lon) covering `spanM` metres and adopt the
+// result as this level's base map. Slow (~30-70s), so it's a start/poll job like the speed test.
+async function captureFromEarth(lat, lon, spanM) {
+  const btn = $("btnEarth");
+  const setBusy = (t) => { if (btn) { btn.disabled = !!t; btn.textContent = t || "🌍 Google Earth"; } };
+  try {
+    const s = await api(`/api/earth/start?lat=${lat}&lon=${lon}&span=${spanM}`);
+    if (!s.ok) { warn(s.error || "Couldn't start the capture."); return false; }
+    toast("Moving Google Earth to the property — about 30 seconds. Don't touch it while it runs.");
+
+    let r = null;
+    for (let i = 0; i < 90; i++) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      r = await api("/api/earth/progress");
+      setBusy(r.phase ? "⏳ " + r.phase : "⏳ working…");
+      if (!r.running) break;
+    }
+    setBusy(null);
+    if (!r || r.running) { warn("Google Earth is taking too long — is it stuck on a dialog?"); return false; }
+    if (r.error) { warn(r.error); return false; }
+    if (!r.result) { warn("The capture finished with nothing to show."); return false; }
+
+    const res = r.result;
+    const accFt = mToFt(res.accuracy.worst_m);
+    // Say the number BEFORE adopting when it's large enough to change how the survey is read.
+    if (accFt > EARTH_ACC_STOP_FT && !confirm(
+      `This view is very hilly or heavily wooded.\n\n` +
+      `Positions on this base map could be off by about ${Math.round(accFt)} ft — far enough that a ` +
+      `reading could land on the neighbouring property.\n\nCapture a smaller area instead, or use it anyway?`
+    )) return false;
+    if (accFt > EARTH_ACC_NOTE_FT && accFt <= EARTH_ACC_STOP_FT && !confirm(
+      `Positions on this base map will be accurate to about ${Math.round(accFt)} ft.\n\n` +
+      `Tall trees and buildings lean outward from the middle of the picture, so readings near the ` +
+      `edges are the least certain. Capturing a smaller area reduces this.\n\nUse it?`
+    )) return false;
+
+    const small = await downscaleCapture(res.image, 1024);
+    const got = adoptAerial(small, res.bounds, {
+      source: "earth", lat: res.lat, lon: res.lon, spanM: res.span_m,
+      accuracy: res.accuracy, captured: res.captured,
+    });
+    if (!got.ok) return false;
+    if (!got.saved) {
+      warn("Captured, but browser storage is full — export the survey now.");
+      return false;
+    }
+    toast(accFt <= EARTH_ACC_EXACT_FT
+      ? "📷 Base map captured — positions are accurate to under 5 ft."
+      : `📷 Base map captured — positions accurate to about ${Math.round(accFt)} ft.`);
+    return true;
+  } catch (e) {
+    setBusy(null);
+    warn(e.message || "Couldn't reach Google Earth.");
+    return false;
+  }
+}
+
+// Geocode whatever's in the address box, then capture that spot from Google Earth.
+async function buildFromEarth() {
+  const q = ($("aerialAddr") && $("aerialAddr").value.trim()) || "";
+  const spanM = +(($("earthSpan") && $("earthSpan").value) || 230);
+  let lat = null, lon = null;
+  if (q) {
+    const btn = $("btnEarth");
+    if (btn) { btn.disabled = true; btn.textContent = "Finding…"; }
+    try {
+      const d = await api("/api/geocode?q=" + encodeURIComponent(q));
+      if (!d || !d.ok || d.lat == null) { warn("Couldn't find that address."); return; }
+      if (d.name && $("aerialAddr")) $("aerialAddr").value = d.name;
+      lat = d.lat; lon = d.lon;
+    } catch (e) {
+      warn("Geocode failed — is the server running?"); return;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "🌍 Google Earth"; }
+    }
+  } else if (lastGpsFix && lastGpsFix.lat != null && lastGpsFix.age_sec <= 120) {
+    lat = lastGpsFix.lat; lon = lastGpsFix.lon;   // standing on the property with no address typed
+    toast("Using your current GPS position");
+  } else {
+    return toast("Type a property address first, or connect your phone's GPS");
+  }
+  await captureFromEarth(lat, lon, spanM);
+}
+
 // Geocode the address box, then compose the aerial around the returned point.
 async function buildAerial() {
   const q = ($("aerialAddr") && $("aerialAddr").value.trim()) || "";
@@ -1886,7 +2076,10 @@ async function buildAerial() {
       return;
     }
     if (d.name && $("aerialAddr")) $("aerialAddr").value = d.name;   // show the REAL matched address
-    await composeAerial(d.lat, d.lon, 19);
+    // A missing-imagery or full-storage message from composeAerial is the thing the surveyor
+    // most needs to see, and it lands first — don't paint the address over the top of it.
+    const built = await composeAerial(d.lat, d.lon, 19);
+    if (!built.ok || built.gaps) return;
     // Only the Census hit (and precise OSM matches) actually pin the house. If we
     // only got an area centroid, load it anyway but tell the tech to pin manually.
     if (d.precise === false) {
@@ -1917,9 +2110,8 @@ function loadTile(z, x, y) {
 // Uses a float grid origin (x0f = cx - nx/2) so the geocoded property lands dead-center.
 async function composeAerial(lat, lon, z) {
   z = Math.max(1, Math.min(21, Math.round(z)));
-  lastAerial = { lat, lon, z };
   toast("Loading satellite imagery…");
-  const nx = 4, ny = 4;                              // composed image = 4×4 tiles (1024px)
+  const nx = AERIAL_TILES, ny = AERIAL_TILES;
   const cx = mercWorldX(lon, z), cy = mercWorldY(lat, z);
   const x0f = cx - nx / 2, y0f = cy - ny / 2;        // float origin → point at exact image center
   const nMax = Math.pow(2, z);
@@ -1933,42 +2125,235 @@ async function composeAerial(lat, lon, z) {
   const tx0 = Math.floor(x0f), ty0 = Math.floor(y0f);
   const tx1 = Math.ceil(x0f + nx) - 1, ty1 = Math.ceil(y0f + ny) - 1;
   const jobs = [];
+  let asked = 0, got = 0;
   for (let ty = ty0; ty <= ty1; ty++) {
     for (let tx = tx0; tx <= tx1; tx++) {
       if (tx < 0 || ty < 0 || tx >= nMax || ty >= nMax) continue;
       const px = (tx - x0f) * 256, py = (ty - y0f) * 256;
-      jobs.push(loadTile(z, tx, ty).then((img) => { if (img) ctx.drawImage(img, px, py, 256, 256); }));
+      asked++;
+      jobs.push(loadTile(z, tx, ty).then((img) => { if (img) { got++; ctx.drawImage(img, px, py, 256, 256); } }));
     }
   }
   await Promise.all(jobs);
 
-  // geo-bounds of the composed image (exact tile-edge lat/lon of the float window)
-  const bounds = {
-    west:  tile2lon(x0f, z),
-    east:  tile2lon(x0f + nx, z),
-    north: tile2lat(y0f, z),
-    south: tile2lat(y0f + ny, z),
-    z: z,
-  };
-  geoBounds = bounds;
-  if (curLevel()) { curLevel().geo = bounds; }
+  // Esri has no imagery everywhere at every zoom, and the depth it runs out at is local —
+  // rural Montana has ground at z21 while downtown San Francisco doesn't. A short grid is a
+  // base map with blank squares in it, so say so instead of letting it reach a client report.
+  if (!got) {
+    warn("No satellite imagery here at this zoom — tap − for a wider view.");
+    return { ok: false, committed: false, gaps: asked };
+  }
+  const gaps = asked - got;
+  if (gaps) {
+    warn(`Only ${got} of ${asked} image tiles exist at this zoom — the gaps are blank. Tap − for a wider view.`);
+  }
 
-  const url = canvas.toDataURL("image/jpeg", 0.85);
-  setFloorPlan(url);       // planMode='image', floorPlanUrl=url, shows planArea, survey mode
-  saveLevels();            // persist geo + the new image on the level (levels serialize wholesale)
-  showGpsSpotBtn();
-  toast("Aerial ready — walk the property and tap “📍 Mark my GPS spot”, or tap the map");
+  // geo-bounds of the composed image (exact tile-edge lat/lon of the float window)
+  const bounds = aerialBounds(lat, lon, z);
+  // toDataURL stays with the producer: each source picks its own size and quality.
+  const adopted = adoptAerial(canvas.toDataURL("image/jpeg", 0.85), bounds,
+    { source: "esri", lat, lon, z });
+  // `committed` says the frame is LIVE — geoBounds swapped, image on screen. `saved` says it
+  // reached storage. They differ on a quota failure, and callers need the first: a caller that
+  // treats "didn't save" as "nothing happened" leaves every pin describing the previous frame.
+  //
+  // An aerial is the most expensive thing in a survey to rebuild — an hour of driving if it's
+  // lost — so a failed write still has to be loud.
+  if (!adopted.saved) {
+    warn("Aerial loaded but couldn't be saved — browser storage is full. Export the survey now.");
+    return { ok: false, committed: adopted.ok, gaps };
+  }
+  if (!gaps) toast("Aerial ready — walk the property and tap “📍 Mark my GPS spot”, or tap the map");
+  return { ok: true, committed: adopted.ok, gaps };
 }
 
+// Everything pinned to this level's base map — readings, boundary corners, router marks — is a
+// plain [0,1] fraction of the image, so swapping the frame underneath them silently moved all of
+// it to different ground. A reading taken at the back fence ended up in the neighbour's yard with
+// nothing to show it had happened.
+//
+// Work out the move BEFORE the new frame is fetched. That's what lets the "you'll lose spots off
+// the edge" question be asked while the old frame is still on screen and still undoable.
+function planRebase(oldGeo, newGeo) {
+  const moving = [
+    ...points.filter((p) => p.level === activeLevel && p.mapX != null).map((p) => ({ o: p, x: "mapX", y: "mapY" })),
+    ...perimeter.map((v) => ({ o: v, x: "x", y: "y" })),
+    ...apMarks.map((a) => ({ o: a, x: "x", y: "y" })),
+  ];
+  const next = moving.map((m) => reprojectFrac(m.o[m.x], m.o[m.y], oldGeo, newGeo));
+  return {
+    lost: next.filter((n) => n && (n.x < 0 || n.x > 1 || n.y < 0 || n.y > 1)).length,
+    apply() {
+      moving.forEach((m, i) => { const n = next[i]; if (n) { m.o[m.x] = n.x; m.o[m.y] = n.y; } });
+      // The re-projection is already applied in memory, so a failed write leaves the survey on
+      // screen correct and the copy on disk describing the OLD frame. Reloading would silently
+      // scatter every reading. Loud, or it isn't a save.
+      const okPts = savePoints();
+      const okMap = saveLevelMap();
+      renderCoverageMap();
+      if (!okPts || !okMap) {
+        warn("Positions were updated on screen but couldn't be saved — export the survey now, "
+             + "and don't reload the page first.");
+      }
+      return okPts && okMap;
+    },
+  };
+}
+
+// Shared by every frame swap. A tighter frame is the one thing a rebase can genuinely destroy,
+// so it's asked about rather than assumed.
+function confirmRebaseLoss(lost) {
+  return !lost || confirm(
+    `This pushes ${lost} marked ${lost === 1 ? "spot" : "spots"} off the edge of the map.\n\n` +
+    `They stay in the survey and the readings list, but they won't show on the map or in the heatmap.\n\nContinue?`
+  );
+}
+
+// Sources that define their frame as a zoom-z Mercator box can be rebuilt at any other z.
+// A Google Earth capture can't: this code has no way to ask Earth for a different view, and its
+// z is synthetic, so `lastAerial.z + delta` would name a frame nothing can produce.
+const ZOOMABLE = { esri: composeAerial, naip: composeNaip };
+
 // Rebuild the current aerial one zoom step wider (z−1) or closer (z+1), same center.
-function zoomAerial(delta) {
+async function zoomAerial(delta) {
   if (!lastAerial) return toast("Build an aerial from an address first");
-  composeAerial(lastAerial.lat, lastAerial.lon, lastAerial.z + delta);
+  const rebuild = ZOOMABLE[lastAerial.source];
+  if (!rebuild) return toast("Re-capture from Google Earth to change the area");
+  const z = Math.max(1, Math.min(21, Math.round(lastAerial.z + delta)));
+  if (z === lastAerial.z) {
+    return toast(delta > 0 ? "Already at the closest zoom" : "Already at the widest zoom");
+  }
+
+  const oldGeo = geoBounds;
+  if (!oldGeo) return rebuild(lastAerial.lat, lastAerial.lon, z);   // nothing pinned yet
+
+  const move = planRebase(oldGeo, aerialBounds(lastAerial.lat, lastAerial.lon, z));
+  if (!confirmRebaseLoss(move.lost)) return;
+
+  const built = await rebuild(lastAerial.lat, lastAerial.lon, z);
+  // Rebase whenever the new frame actually went live. Gating on `ok` meant a storage-full
+  // rebuild swapped the map but left every reading, corner and router pinned to the OLD box —
+  // each one silently describing different ground.
+  if (built.committed) move.apply();
+}
+
+/* ---------- USDA NAIP base map ---------- */
+// Public-domain, orthorectified, and it carries a real capture date. Uses the SAME
+// aerialBounds() box as the Esri path, so it's a drop-in — including −／＋ zoom.
+//
+// Flown leaf-on, May to September, so on a wooded parcel the canopy can hide a driveway or an
+// outbuilding that winter imagery would show. That's why it's a choice, not a replacement.
+async function composeNaip(lat, lon, z) {
+  z = Math.max(1, Math.min(21, Math.round(z)));
+  toast("Loading NAIP imagery…");
+  const bounds = aerialBounds(lat, lon, z);
+  const url = apiUrl(`/api/naip?west=${bounds.west}&east=${bounds.east}` +
+                     `&north=${bounds.north}&south=${bounds.south}&size=1024`);
+  const img = await new Promise((res) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => res(null);
+    i.src = url;
+  });
+  if (!img) {
+    warn("No NAIP imagery here — it covers the United States only. Try satellite instead.");
+    return { ok: false, committed: false, gaps: 0 };
+  }
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext("2d").drawImage(img, 0, 0);
+  const adopted = adoptAerial(c.toDataURL("image/jpeg", 0.85), bounds,
+    { source: "naip", lat, lon, z });
+  if (!adopted.saved) {
+    warn("NAIP loaded but couldn't be saved — browser storage is full. Export the survey now.");
+    return { ok: false, committed: adopted.ok, gaps: 0 };
+  }
+  toast("NAIP aerial ready — walk the property and tap “📍 Mark my GPS spot”, or tap the map");
+  return { ok: true, committed: adopted.ok, gaps: 0 };
+}
+
+// Geocode the address box, then build a NAIP base map around it.
+async function buildNaip() {
+  const q = ($("aerialAddr") && $("aerialAddr").value.trim()) || "";
+  if (!q) return toast("Type a property address first");
+  const btn = $("btnNaip");
+  if (btn) { btn.disabled = true; btn.textContent = "Finding…"; }
+  try {
+    const d = await api("/api/geocode?q=" + encodeURIComponent(q));
+    if (!d || !d.ok || d.lat == null) return warn("Couldn't find that address.");
+    if (d.name && $("aerialAddr")) $("aerialAddr").value = d.name;
+    await composeNaip(d.lat, d.lon, 19);
+  } catch (e) {
+    warn("Geocode failed — is the server running?");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🌾 NAIP"; }
+  }
 }
 
 // Show/hide the "Mark my GPS spot" affordance depending on whether the level has an aerial.
 function showGpsSpotBtn() { const b = $("gpsSpotBar"); if (b) b.classList.remove("hidden"); }
 function hideGpsSpotBtn() { const b = $("gpsSpotBar"); if (b) b.classList.add("hidden"); }
+
+// The base-map bar, shown only when this level actually has a georeferenced base map. The zoom
+// buttons are Esri-only — a captured frame has no tile ladder, so they'd compute a view nothing
+// can produce.
+function showAerialBar() {
+  const b = $("aerialBar"); if (!b) return;
+  b.classList.toggle("hidden", !geoBounds);
+  const src = (lastAerial && lastAerial.source) || "esri";
+  const zoomable = !!ZOOMABLE[src];
+  ["btnZoomOut", "btnZoomIn"].forEach((id) => { const x = $(id); if (x) x.classList.toggle("hidden", !zoomable); });
+  const s = $("aerialSrc");
+  if (s) s.textContent =
+    src === "naip" ? "USDA NAIP (summer imagery) — −／＋ for a wider or closer view."
+    : src === "earth" ? earthAccuracyNote(lastAerial)
+    : "Satellite imagery — −／＋ for a wider or closer view.";
+}
+
+// Credit every base map the survey actually used, and state each one's positional tolerance.
+// A survey can mix sources across floors now, so this can't be one hardcoded line — and the
+// tolerance belongs in the deliverable, not just on screen.
+function baseMapCredit() {
+  const geoLevels = levels.filter((l) => l.geo);
+  if (!geoLevels.length) return "";
+  const bits = [];
+  // Esri's own copyrightText, verbatim — naming only Esri drops the licensors it requires.
+  if (geoLevels.some((l) => !l.aerial || l.aerial.source === "esri")) {
+    bits.push("Imagery source: Esri, Vantor, Earthstar Geographics, and the GIS User Community.");
+  }
+  if (geoLevels.some((l) => l.aerial && l.aerial.source === "naip")) {
+    bits.push("Aerial imagery: USDA National Agriculture Imagery Program (public domain).");
+  }
+  const earth = geoLevels.filter((l) => l.aerial && l.aerial.source === "earth");
+  if (earth.length) {
+    bits.push("Base map imagery captured from Google Earth.");
+    earth.forEach((l) => {
+      const a = l.aerial.accuracy;
+      if (!a) return;
+      const ft = Math.round(mToFt(a.worst_m));
+      bits.push(`<b>${esc(l.name)}</b>: positions on this base map are accurate to about ` +
+        `${ft <= EARTH_ACC_EXACT_FT ? "under " + EARTH_ACC_EXACT_FT : ft} ft` +
+        (a.relief_m > 5 ? `, measured across ${Math.round(mToFt(a.relief_m))} ft of ground and ` +
+          `tree height in view — readings beside tall trees or buildings near the edge of the ` +
+          `picture are the least certain` : "") +
+        (l.aerial.captured ? ` (captured ${String(l.aerial.captured).slice(0, 10)})` : "") + ".");
+    });
+  }
+  return `<p class="legend" style="opacity:.7;font-size:11px">${bits.join(" ")} GPS-located readings.</p>`;
+}
+
+// One sentence about how much this base map can be trusted. The tolerance travels with the image
+// everywhere it's shown — on the map and in the report — because a stated tolerance is the
+// difference between a measurement and an implied precision that isn't there.
+function earthAccuracyNote(meta) {
+  if (!meta || meta.source !== "earth" || !meta.accuracy) return "Captured base map.";
+  const ft = Math.round(mToFt(meta.accuracy.worst_m));
+  const when = meta.captured ? " · captured " + String(meta.captured).slice(0, 10) : "";
+  if (ft <= EARTH_ACC_EXACT_FT) return `Google Earth · positions accurate to under ${EARTH_ACC_EXACT_FT} ft${when}`;
+  return `Google Earth · positions accurate to about ${ft} ft — tall trees and buildings near the ` +
+         `edges are the least certain${when}`;
+}
+function hideAerialBar() { const b = $("aerialBar"); if (b) b.classList.add("hidden"); }
 
 // Forward transform: a GPS fix (or {lat,lon}) → the aerial's 0..1 relative coords.
 // EXACT same projection markGpsSpot used; clamps to the image and reports `outside`.
@@ -2169,7 +2554,7 @@ function generateMapDataURL() {
   const gw = 220, gh = Math.max(1, Math.round((220 * H) / W));
   ctx.imageSmoothingEnabled = true;
   ctx.globalAlpha = 0.55;
-  ctx.drawImage(buildHeatCanvas(mapped, gw, gh), 0, 0, W, H);
+  ctx.drawImage(buildHeatCanvas(mapped, gw, gh, mapAspect()), 0, 0, W, H);
   if (showContours) drawContours(ctx, W, H, mapped);
   ctx.globalAlpha = 1;
   ctx.restore();
@@ -2203,7 +2588,9 @@ function newLevelId() { return "L" + (levels.reduce((m, l) => Math.max(m, +l.id.
 // failure here loses the whole base map, which is the most expensive thing to rebuild.
 function saveLevels() {
   if (!store(LS_LEVELS, JSON.stringify(levels))) return false;
-  return store(LS_ACTIVELEVEL, activeLevel || "");
+  const ok = store(LS_ACTIVELEVEL, activeLevel || "");
+  scheduleLivePush();
+  return ok;
 }
 function initLevels() {
   if (!levels.length) {
@@ -2215,10 +2602,13 @@ function initLevels() {
 // mirror the active working state (base map) back into the current level object
 function saveLevelMap() {
   const L = curLevel();
-  if (!L) return;
+  if (!L) return false;
   L.planMode = planMode;
   L.floorPlanUrl = floorPlanUrl;
   L.geo = geoBounds || L.geo || null;   // preserve aerial geo-bounds across level switches
+  // The center+zoom the aerial was built from. Without it on the level, lastAerial died with the
+  // page and the −／＋ buttons went dead after any reload on a level that plainly had an aerial.
+  L.aerial = (geoBounds && lastAerial) ? lastAerial : (L.aerial || null);
   L.cal = calibration || L.cal || null;   // preserve the manual scale reference (uploaded plans)
   L.predictAPs = predictAPs;   // preserve predicted AP placements (design mode)
   L.surveyType = surveyType || L.surveyType || "all";   // preserve the WHAT-kind view choice
@@ -2226,13 +2616,21 @@ function saveLevelMap() {
   L.perimeter = perimeter;
   L.apMarks = apMarks;
   try { const snap = generateMapDataURL(); if (snap) L.snapshot = snap; } catch (e) {}
-  saveLevels();
+  return saveLevels();
 }
 // load a level's base map into the working state + reset the map UI
 function applyLevelMap(L) {
   planMode = L.planMode || null;
   floorPlanUrl = L.floorPlanUrl || null;
   geoBounds = L.geo || null;   // restore aerial geo-bounds (null for schematic / uploaded-image levels)
+  // Surveys saved before L.aerial existed have geo but no source metadata. Every one of those is
+  // an Esri tile frame and its centre is exactly the centre of its own box, so rebuild the record
+  // instead of leaving the zoom buttons pointing at nothing.
+  lastAerial = L.aerial || (L.geo ? {
+    source: "esri", z: L.geo.z,
+    lat: tile2lat((mercWorldY(L.geo.north, L.geo.z) + mercWorldY(L.geo.south, L.geo.z)) / 2, L.geo.z),
+    lon: (L.geo.west + L.geo.east) / 2,
+  } : null);
   calibration = L.cal || null;   // restore the manual scale reference
   calTemp = { a: null, b: null };
   predictAPs = L.predictAPs || [];
@@ -2261,7 +2659,7 @@ function applyLevelMap(L) {
     $("planArea").classList.add("hidden");
     $("planEmpty").classList.remove("hidden");
   }
-  if (geoBounds) showGpsSpotBtn(); else hideGpsSpotBtn();
+  if (geoBounds) { showGpsSpotBtn(); showAerialBar(); } else { hideGpsSpotBtn(); hideAerialBar(); }
   applySurveyType(L.surveyType || "all");   // restore WHAT-kind view AFTER base mode is set, so the type default wins
 }
 function switchLevel(id) {
@@ -2437,8 +2835,10 @@ function resetPlan() {
   rooms = [];
   perimeter = [];
   apMarks = [];
-  if (curLevel()) { curLevel().planMode = null; curLevel().floorPlanUrl = null; curLevel().geo = null; curLevel().cal = null; curLevel().rooms = []; curLevel().perimeter = []; curLevel().apMarks = []; curLevel().snapshot = null; saveLevels(); }
+  lastAerial = null;   // the frame it described is gone; leaving it lets zoomAerial rebuild a base map the tech just cleared
+  if (curLevel()) { curLevel().planMode = null; curLevel().floorPlanUrl = null; curLevel().geo = null; curLevel().aerial = null; curLevel().cal = null; curLevel().rooms = []; curLevel().perimeter = []; curLevel().apMarks = []; curLevel().snapshot = null; saveLevels(); }
   hideGpsSpotBtn();
+  hideAerialBar();
   $("mapWrap").classList.remove("schematic");
   $("schematicBar").classList.add("hidden");
   $("planArea").classList.add("hidden");
@@ -2942,7 +3342,7 @@ function generateSchematicDataURL() {
     heatClip(ctx, RW, RH, mapped);
     const gw = 220, gh = Math.round((220 * RH) / RW);
     ctx.imageSmoothingEnabled = true; ctx.globalAlpha = 0.5;
-    ctx.drawImage(buildHeatCanvas(mapped, gw, gh), 0, 0, RW, RH);
+    ctx.drawImage(buildHeatCanvas(mapped, gw, gh, mapAspect()), 0, 0, RW, RH);
     if (showContours) drawContours(ctx, RW, RH, mapped);
     ctx.globalAlpha = 1;
     ctx.restore();
@@ -3296,7 +3696,9 @@ document.addEventListener("click", (e) => {
 });
 
 /* ---------- persistence ---------- */
-function savePoints() { return store(LS_POINTS, JSON.stringify(points)); }
+// Every reading, every edit and every deletion already funnels through here, which makes it the
+// one place the live Google Earth view needs to know about.
+function savePoints() { const ok = store(LS_POINTS, JSON.stringify(points)); scheduleLivePush(); return ok; }
 function saveSite() {
   const s = {};
   SITE_FIELDS.forEach((f) => (s[f] = $(f).value));
@@ -3375,74 +3777,320 @@ function exportCSV() {
 // Google Earth Pro or Google Maps — no Google Earth needed to view, but it's there
 // if they want it. Readings use their real GPS coords when present, else the aerial
 // inverse transform. Needs an aerial (geoBounds) or at least one GPS-tagged point.
+/* ---------- live view in Google Earth ---------- */
+// Google Earth polls the local server every few seconds; this pushes the current survey to it
+// so coverage builds up on the imagery while the property is being walked.
+let livePush = null;      // pending debounce timer
+let liveOn = false;
+// Google Earth keeps every NetworkLink it is handed, and there is no way to remove one from
+// here. Opening a second time therefore draws the whole survey twice — doubled labels, doubled
+// overlay. Once this session has handed Earth a link, stopping and restarting just resumes
+// pushing to the link that is already there.
+let liveOpened = false;
+let liveStalled = false;   // warn once per stall, not once per retry
+
+// Put the button back to "off" WITHOUT re-entering toggleLiveEarth — calling it again would flip
+// liveOn straight back to true and fire another /api/live/open, which on a failing server loops
+// for as long as the page is open.
+function liveOff(msg) {
+  liveOn = false;
+  clearTimeout(livePush);
+  const b = $("btnLive");
+  if (b) { b.classList.remove("on"); b.textContent = "🛰 Live in Google Earth"; }
+  if (msg) warn(msg);
+}
+
+function toggleLiveEarth() {
+  liveOn = !liveOn;
+  const b = $("btnLive");
+  if (b) { b.classList.toggle("on", liveOn); b.textContent = liveOn ? "🛑 Stop live view" : "🛰 Live in Google Earth"; }
+  if (!liveOn) { clearTimeout(livePush); return toast("Live view stopped — Google Earth will keep the last picture."); }
+  if (liveOpened) {
+    toast("Live view resumed — Google Earth is already watching.");
+    return pushLive();
+  }
+  api("/api/live/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+    .then((r) => {
+      if (!r.ok) return liveOff(r.error || "Couldn't open Google Earth.");
+      liveOpened = true;
+      toast(`Live view on — Google Earth refreshes every ${r.refresh}s as you walk.`);
+      // Earth draws its 3D trees on top of the coverage wash, so on a wooded lot the colour only
+      // shows through gaps in the canopy. There is no way to fix that from the KML side.
+      const hint = $("liveHint");
+      if (hint) hint.classList.remove("hidden");
+      pushLive();
+    })
+    .catch((e) => liveOff(e.message || "Couldn't reach the server."));
+}
+
+// Called from savePoints/saveLevels. Debounced: a walk generates a burst of writes and Earth
+// only reads every few seconds anyway, so pushing on every keystroke would be wasted work.
+function scheduleLivePush() {
+  if (!liveOn) return;
+  clearTimeout(livePush);
+  livePush = setTimeout(pushLive, 1200);
+}
+
+async function pushLive() {
+  if (!liveOn) return;
+  try {
+    const built = buildSurveyKml({ live: true });
+    await api("/api/live/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc: built.doc, overlay: built.overlay }),
+    });
+    if (liveStalled) { liveStalled = false; toast("Live view caught up — Google Earth is current again."); }
+  } catch (e) {
+    // Swallowing this was wrong. Google Earth keeps polling happily and keeps redrawing the LAST
+    // ACCEPTED frame, so a stalled push looks exactly like a working one. And a push that failed
+    // on size never recovers by itself — readings only accumulate. Say it once per stall.
+    if (!liveStalled) {
+      liveStalled = true;
+      warn("Google Earth is showing an older picture — " + (e.message || "the update didn't go through"));
+    }
+  }
+}
+
+/* ---------- KMZ (zip) writer ---------- */
+// A KMZ is a zip. Stored entries only — the payload is already-compressed PNG and JPEG, so
+// deflating would cost code and buy nothing. ~60 lines beats taking on a zip dependency in a
+// project that deliberately has none.
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+// files: [{name, bytes:Uint8Array}] -> Blob
+function makeZip(files) {
+  const enc = new TextEncoder();
+  const chunks = [], central = [];
+  let offset = 0;
+  const u16 = (n) => [n & 0xFF, (n >>> 8) & 0xFF];
+  const u32 = (n) => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
+  files.forEach((f) => {
+    const name = enc.encode(f.name), crc = crc32(f.bytes), len = f.bytes.length;
+    const local = new Uint8Array([
+      0x50, 0x4B, 0x03, 0x04, ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),                       // no timestamp: keeps exports reproducible
+      ...u32(crc), ...u32(len), ...u32(len), ...u16(name.length), ...u16(0),
+    ]);
+    chunks.push(local, name, f.bytes);
+    central.push(new Uint8Array([
+      0x50, 0x4B, 0x01, 0x02, ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0),
+      ...u32(crc), ...u32(len), ...u32(len), ...u16(name.length),
+      ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
+    ]), name);
+    offset += local.length + name.length + len;
+  });
+  const cdStart = offset;
+  let cdSize = 0;
+  central.forEach((c) => { cdSize += c.length; });
+  const end = new Uint8Array([
+    0x50, 0x4B, 0x05, 0x06, ...u16(0), ...u16(0),
+    ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(cdStart), ...u16(0),
+  ]);
+  return new Blob([...chunks, ...central, end], { type: "application/vnd.google-earth.kmz" });
+}
+function dataUrlToBytes(u) {
+  const bin = atob(u.split(",", 2)[1]);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// KML colour is aabbggrr, NOT rgba — the byte order is reversed and alpha comes first.
+function kmlColor(hex, alpha) {
+  const h = hex.replace("#", "");
+  return ((alpha & 0xFF).toString(16).padStart(2, "0") + h.slice(4, 6) + h.slice(2, 4) + h.slice(0, 2));
+}
+
+// The coverage wash for one level as a transparent PNG, in the level's own geo box.
+// buildHeatCanvas already fades to alpha 0 away from readings; heatClip is what keeps it inside
+// the drawn boundary instead of painting the whole rectangle.
+function heatOverlayPng(levelPts, geo, W, levelPerimeter) {
+  if (!levelPts.length || !geo) return null;
+  W = W || 1024;
+  const H = Math.max(1, Math.round(W * mapAspectOf(geo)));
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const ctx = c.getContext("2d");
+  ctx.save();
+  // heatClip reads the module-level `perimeter`, i.e. whichever level happens to be open. On a
+  // multi-level export that clipped the upstairs wash to the ground floor's boundary. Swap in the
+  // level's own boundary for the duration of the draw, then put it back.
+  const saved = perimeter;
+  perimeter = levelPerimeter || [];
+  try { heatClip(ctx, W, H, levelPts); } finally { perimeter = saved; }
+  ctx.drawImage(buildHeatCanvas(levelPts, Math.min(W, 260), Math.min(H, 260), mapAspectOf(geo)), 0, 0, W, H);
+  ctx.restore();
+  return c.toDataURL("image/png");
+}
+// True feet aspect of an arbitrary level's box — mapAspect() only knows the active level.
+function mapAspectOf(geo) {
+  if (!geo) return 1;
+  const midLat = (geo.north + geo.south) / 2, midLon = (geo.west + geo.east) / 2;
+  const w = haversineFt(midLat, geo.west, midLat, geo.east);
+  const h = haversineFt(geo.north, midLon, geo.south, midLon);
+  return w > 0 ? h / w : 1;
+}
+
+// Export the whole survey to a .kmz that opens in Google Earth: the coverage heatmap as a
+// ground overlay, every reading styled by signal, plus boundaries and routers — per level, each
+// in its own folder so they can be toggled independently.
+// Build the survey as KML. Two consumers with one body of geometry:
+//   exportKML()  — a .kmz file, each level's heatmap zipped alongside as its own PNG
+//   pushLive()   — the same document served to Google Earth, overlay fetched over http
+// Returns {doc, files, overlay}: `doc` is the Document body (no envelope), `files` are the
+// entries a KMZ needs, `overlay` is a base64 PNG for the live path.
+// Seeded from the clock, not 0: a page reload would otherwise reissue v=1, v=2 … and Google
+// Earth caches a GroundOverlay by URL, so a repeated URL can redraw the previous survey's wash.
+let liveVersion = Date.now() % 1000000;
+function buildSurveyKml(opts) {
+  const live = !!(opts && opts.live);
+  const x = (s) => esc(s);
+  const files = [];
+  let overlay = null;
+  const parts = [];
+  const emitted = new Set();   // points already placed in a level folder
+  if (live) liveVersion++;
+
+  // one style per rating, so signal quality is visible instead of every pin looking the same
+  ["exc", "good", "fair", "poor", "na"].forEach((cls) => {
+    const c = { exc: "#34d399", good: "#a3e635", fair: "#fbbf24", poor: "#f87171", na: "#7c8aa6" }[cls];
+    parts.push(`<Style id="r_${cls}"><IconStyle><color>${kmlColor(c, 255)}</color><scale>1.1</scale>` +
+      `<Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle>` +
+      `<LabelStyle><scale>0.8</scale></LabelStyle></Style>`);
+  });
+
+  levels.forEach((L, li) => {
+    const geo = L.geo || null;
+    const lvPts = points.filter((p) => p.level === L.id);
+    const mapped = lvPts.filter((p) => p.mapX != null);
+    const body = [];
+
+    // heatmap ground overlay, in THIS level's box.
+    // Live mode carries only the ACTIVE level: the overlay travels as base64 in a POST body,
+    // and one level at 512px is the difference between a comfortable push and one that trips
+    // the server's 1 MiB body cap mid-walk.
+    const wantOverlay = geo && mapped.length && (!live || L.id === activeLevel);
+    if (wantOverlay) {
+      const png = heatOverlayPng(mapped, geo, live ? 512 : 1024, L.perimeter);
+      if (png) {
+        // Earth caches a GroundOverlay by its URL independently of the NetworkLink that named
+        // it, so without a changing query the wash would freeze on the first frame forever.
+        const href = live
+          // 127.0.0.1, not location.origin: Google Earth fetches this from the Mac, and the
+          // live routes are loopback-only. Driving the dashboard from a phone would
+          // otherwise put the Mac's LAN IP here and get a 403.
+          ? `http://127.0.0.1:${location.port || 8765}/api/live/overlay.png?k=${encodeURIComponent(LIVE_TOKEN || API_KEY)}&v=${liveVersion}`
+          : `overlay_${li}.png`;
+        if (live) overlay = png; else files.push({ name: href, bytes: dataUrlToBytes(png) });
+        // Clamped to the ground, the wash is drawn UNDER Google Earth's 3D trees and buildings —
+        // on a wooded lot it disappears exactly where the survey matters most. Floating it above
+        // the canopy keeps it visible. relativeToGround (not absolute) so it follows terrain on
+        // a slope instead of cutting into a hillside.
+        // Google Earth's 3D trees and buildings always draw OVER a GroundOverlay, so on a wooded
+        // lot the wash shows through gaps in the canopy and nowhere else. Measured: raising the
+        // overlay to 250 m with relativeToGround changes nothing — the occlusion is render order,
+        // not depth, so there is no KML-side fix. The technician turns off Google Earth's
+        // "3D Buildings" layer instead, which is why the UI says so.
+        body.push(`<GroundOverlay><name>Coverage heatmap</name><color>b4ffffff</color><drawOrder>1</drawOrder>` +
+          `<Icon><href>${x(href)}</href><refreshMode>onChange</refreshMode></Icon>` +
+          `<LatLonBox><north>${geo.north}</north><south>${geo.south}</south>` +
+          `<east>${geo.east}</east><west>${geo.west}</west><rotation>0</rotation></LatLonBox></GroundOverlay>`);
+      }
+    }
+
+    lvPts.forEach((p) => {
+      let lat = null, lon = null;
+      if (p.gps && p.gps.lat != null && p.gps.lon != null) { lat = p.gps.lat; lon = p.gps.lon; }
+      else if (p.mapX != null && geo) {
+        const ll = mapToLatLonIn(geo, p.mapX, p.mapY);
+        if (ll) { lat = ll.lat; lon = ll.lon; }
+      }
+      if (lat == null) return;
+      emitted.add(p);
+      const r = rate(p.signal, p.snr);
+      const desc = `${p.signal != null ? p.signal + " dBm" : "no signal"} · ${r.word}`
+        + (p.ssid ? " · " + p.ssid : "") + (p.snr != null ? " · SNR " + p.snr : "");
+      body.push(`<Placemark><name>${x(p.location || "Reading")}</name>` +
+        `<description>${x(desc)}</description><styleUrl>#r_${r.cls}</styleUrl>` +
+        `<Point><coordinates>${lon},${lat},0</coordinates></Point></Placemark>`);
+    });
+
+    // These used to read the ACTIVE level's globals, so every other floor's routers and
+    // boundary silently vanished from the export.
+    if (geo) {
+      (L.apMarks || []).forEach((a) => {
+        const ll = mapToLatLonIn(geo, a.x, a.y);
+        body.push(`<Placemark><name>${x(a.label || "Router")}</name>` +
+          `<description>Router / access point</description>` +
+          `<Point><coordinates>${ll.lon},${ll.lat},0</coordinates></Point></Placemark>`);
+      });
+      const per = L.perimeter || [];
+      if (per.length >= 2) {
+        const coords = per.map((pt) => { const ll = mapToLatLonIn(geo, pt.x, pt.y); return `${ll.lon},${ll.lat},0`; });
+        if (per.length >= 3) coords.push(coords[0]);
+        body.push('<Placemark><name>Property boundary</name>' +
+          `<Style><LineStyle><color>${kmlColor("#f8bd38", 255)}</color><width>3</width></LineStyle></Style>` +
+          `<LineString><tessellate>1</tessellate><coordinates>${coords.join(" ")}</coordinates></LineString></Placemark>`);
+      }
+    }
+    if (body.length) parts.push(`<Folder><name>${x(L.name || "Level")}</name>${body.join("")}</Folder>`);
+  });
+
+  // readings with a GPS fix but no level geo would otherwise be dropped entirely
+  // Anything with a real fix that no level folder already carried. Deriving this from
+  // "level has no geo" instead double-counted every GPS reading on a schematic level:
+  // the level loop emits it from p.gps, then this emitted it again.
+  const orphans = points.filter((p) => p.gps && p.gps.lat != null && !emitted.has(p));
+  if (orphans.length) {
+    parts.push(`<Folder><name>GPS readings</name>` + orphans.map((p) => {
+      const r = rate(p.signal, p.snr);
+      return `<Placemark><name>${x(p.location || "Reading")}</name><styleUrl>#r_${r.cls}</styleUrl>` +
+        `<Point><coordinates>${p.gps.lon},${p.gps.lat},0</coordinates></Point></Placemark>`;
+    }).join("") + `</Folder>`);
+  }
+
+  // where the surveyor is standing right now — the whole point of watching it live
+  if (live && lastGpsFix && lastGpsFix.lat != null && lastGpsFix.age_sec != null && lastGpsFix.age_sec <= 60) {
+    parts.push(`<Placemark><name>You are here</name>` +
+      `<Style><IconStyle><color>ffffffff</color><scale>1.3</scale>` +
+      `<Icon><href>http://maps.google.com/mapfiles/kml/shapes/track.png</href></Icon></IconStyle></Style>` +
+      `<Point><coordinates>${lastGpsFix.lon},${lastGpsFix.lat},0</coordinates></Point></Placemark>`);
+  }
+  return { doc: parts.join("\n"), files, overlay };
+}
+
 function exportKML() {
   saveLevelMap();
   const hasGps = points.some((p) => p.gps && p.gps.lat != null);
-  const anyGeo = levels.some((l) => l.geo);
-  if (!anyGeo && !hasGps) {
+  if (!levels.some((l) => l.geo) && !hasGps) {
     return toast("KML needs an aerial (Aerial from address) or GPS-tagged readings first.");
   }
-  const geoOf = (levelId) => {
-    const l = levels.find((L) => L.id === levelId);
-    return (l && l.geo) || null;
-  };
-  const x = (s) => esc(s); // esc() already escapes & < > "
-  const parts = [];
-  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
-  parts.push('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>');
-  const client = ($("f_client") && $("f_client").value.trim()) || "WiFi Survey";
-  parts.push(`<name>${x(client)} — WiFi Survey</name>`);
-
-  // reading placemarks (real GPS first, else aerial inverse) across ALL levels' mapped points
-  points.forEach((p) => {
-    let lat = null, lon = null;
-    if (p.gps && p.gps.lat != null && p.gps.lon != null) { lat = p.gps.lat; lon = p.gps.lon; }
-    else if (p.mapX != null && p.mapY != null) {
-      // through the reading's OWN level's aerial, not whichever one happens to be open
-      const ll = mapToLatLonIn(geoOf(p.level), p.mapX, p.mapY);
-      if (ll) { lat = ll.lat; lon = ll.lon; }
-    }
-    if (lat == null || lon == null) return;
-    const r = rate(p.signal, p.snr);
-    const desc = `${p.signal != null ? p.signal + " dBm" : "no signal"} · ${r.word}`
-      + (p.ssid ? " · " + p.ssid : "") + (p.snr != null ? " · SNR " + p.snr : "");
-    parts.push(
-      `<Placemark><name>${x(p.location || "Reading")}</name>` +
-      `<description>${x(desc)}</description>` +
-      `<Point><coordinates>${lon},${lat},0</coordinates></Point></Placemark>`
-    );
-  });
-
-  // AP / router markers (aerial-relative → lat/lon)
-  if (geoBounds) {
-    apMarks.forEach((a) => {
-      const ll = mapToLatLon(a.x, a.y);
-      parts.push(
-        `<Placemark><name>${x(a.label || "Router")}</name>` +
-        `<description>Router / access point</description>` +
-        `<Point><coordinates>${ll.lon},${ll.lat},0</coordinates></Point></Placemark>`
-      );
-    });
-  }
-
-  // perimeter boundary as a LineString (closed ring when >=3 corners)
-  if (geoBounds && perimeter.length >= 2) {
-    const coords = perimeter.map((pt) => { const ll = mapToLatLon(pt.x, pt.y); return `${ll.lon},${ll.lat},0`; });
-    if (perimeter.length >= 3) coords.push(coords[0]); // close the ring
-    parts.push(
-      '<Placemark><name>Property boundary</name>' +
-      '<Style><LineStyle><color>fff8bd38</color><width>3</width></LineStyle></Style>' +
-      `<LineString><tessellate>1</tessellate><coordinates>${coords.join(" ")}</coordinates></LineString></Placemark>`
-    );
-  }
-
-  parts.push('</Document></kml>');
-  const blob = new Blob([parts.join("\n")], { type: "application/vnd.google-earth.kml+xml" });
+  const client = ($("f_client") && $("f_client").value.trim()) || "";
+  const built = buildSurveyKml({});
+  const doc = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    + '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+    + `<name>${esc(client ? client + " — WiFi Survey" : "WiFi Survey")}</name>`
+    + built.doc + '</Document></kml>';
+  const files = [{ name: "doc.kml", bytes: new TextEncoder().encode(doc) }, ...built.files];
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = (client || "site").replace(/\W+/g, "_") + ".kml";
+  a.href = URL.createObjectURL(makeZip(files));
+  a.download = (client || "site").replace(/\W+/g, "_") + ".kmz";
   a.click();
-  toast("KML saved — open it in Google Earth Pro or Google Maps");
+  toast("KMZ saved — open it in Google Earth to see the coverage overlay");
 }
 // Opening a file REPLACES the survey on screen, so it has to ask first — the neutral-looking
 // button was the one destructive action in the app with no confirm.
@@ -3763,7 +4411,7 @@ function buildReport(site, pts) {
   if (heatmapSection) {
     heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label} — Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}) — weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>
       <p class="legend">Each reading is marked <b>E</b> excellent, <b>G</b> good, <b>W</b> weak or <b>D</b> dead zone, so the map reads correctly in greyscale and with colour blindness.</p>`;
-    if (levels.some((l) => l.geo)) heatmapSection += `<p class="legend" style="opacity:.7;font-size:11px">Imagery © Esri — GPS-located readings.</p>`;
+    heatmapSection += baseMapCredit();
   }
 
   // throughput section
@@ -4277,7 +4925,7 @@ const TIPS = [
   { term: "Aerial base map", tip: "A satellite image pulled from an address, used as the map you tap readings onto — no floor plan needed. Best for outdoor and property jobs." },
   { term: "GPS walk & drop", tip: "Stream your phone's location to the Mac and drop a reading at your exact spot as you walk the property — no Google Earth Pro needed." },
   { term: "Contour lines", tip: "Topographic-style lines on the heatmap, each marking one signal level (e.g. −67), so you can see exactly where 'Good' turns into 'Fair'." },
-  { term: "KML / Google Earth export", tip: "Saves your walked boundary and points as a .kml file that opens in Google Earth or goes to the client." },
+  { term: "KMZ / Google Earth export", tip: "Saves the coverage heatmap, every reading, your boundary and the routers as a .kmz that opens in Google Earth or goes to the client." },
   { term: "CSV export", tip: "Every reading as a spreadsheet row — room, floor, band, channel, RSSI, SNR, rate, rating, GPS — for records or a client who wants raw numbers." },
   { term: "Speed test gauge", tip: "A one-tap needle sweep for download, upload, and responsiveness, measuring your real internet path with macOS's built-in tool." },
   { term: "Mission Control", tip: "The home page — your whole survey on one screen: signal score, live vitals, a progress checklist, top findings, and the Generate Report button." },
@@ -4302,7 +4950,7 @@ const GUIDE_FLOW = [
   "<b>Aim the gateway (if cellular):</b> use the Cellular page to find the best SINR/RSRP spot — watch the Excellent/Good/Fair/Poor verdict — then survey the Wi-Fi it puts out.",
   "<b>Survey:</b> walk and tap where you stand — indoors on the floor plan, outdoors by phone GPS. Pick a target (Voice / Data / Video) and watch % passing climb. The heatmap builds live.",
   "<b>Analyze:</b> switch metrics and colormaps, flip to Pass/Fail, turn on Contour lines, and use Predict coverage to model where to add access points before you walk.",
-  "<b>Deliver:</b> back on Mission Control (or Report), the 0–100 score + findings + infrastructure summary are ready — Generate Report → Save as PDF, and export .json / .csv / .kml.",
+  "<b>Deliver:</b> back on Mission Control (or Report), the 0–100 score + findings + infrastructure summary are ready — Generate Report → Save as PDF, and export .json / .csv / .kmz.",
 ];
 const GUIDE_PAGES = [
   { name: "Mission Control", desc: "Your home base — the whole survey at a glance. A 0–100 signal score, live vitals (rooms, best/worst, dead spots in ft², % passing, area), a progress checklist, top findings you can locate on the map, quick links to every tool, and the one-click Generate Report." },
@@ -4310,8 +4958,8 @@ const GUIDE_PAGES = [
   { name: "Coverage", desc: "The main survey. Build a base map, walk and tap where you stand, and the heatmap builds live. Pick a target (Voice/Data/Video) for a live % passing, set a scale for real square footage, add contour lines, and use Predict coverage to model APs before you walk. Tools are grouped under the 🛠 Tools menu." },
   { name: "Site Plan", desc: "A plot plan for the whole property. Draw the house footprint by hand, walk the yard boundary with your phone GPS (to real scale), then drop the house where it sits on the lot. House and property are separate objects you can place, rotate, and resize." },
   { name: "Cellular", desc: "Aim a home cellular gateway or antenna. Live bars plus RSRP / RSRQ / SINR with Excellent/Good/Fair/Poor grades and an overall verdict find the window or wall with the best tower signal. Aim this first, then survey the Wi-Fi." },
-  { name: "GPS", desc: "Walk a property outdoors. Your phone streams its location to the Mac; drop readings and property corners as you walk, trace a boundary, and export it to Google Earth (.kml)." },
-  { name: "Report", desc: "Client details, the 0–100 score with plain-English findings, an infrastructure & security summary, and site photos. Make the report, then Save as PDF. Also where you save, export (.json/.csv/.kml), or re-open a survey." },
+  { name: "GPS", desc: "Walk a property outdoors. Your phone streams its location to the Mac; drop readings and property corners as you walk, trace a boundary, and export the survey to Google Earth (.kmz)." },
+  { name: "Report", desc: "Client details, the 0–100 score with plain-English findings, an infrastructure & security summary, and site photos. Make the report, then Save as PDF. Also where you save, export (.json/.csv/.kmz), or re-open a survey." },
   { name: "Advanced", desc: "Live network internals (RSSI, SNR, channel, PHY, rate), launch buttons for NetSpot and WiFi Explorer, and a nearby-networks table for spotting channel crowding." },
 ];
 function renderGuide() {
