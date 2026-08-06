@@ -1,16 +1,16 @@
-# WiFi Site Survey — Mission Control
+# WiFi Site Survey: Mission Control
 
 A self-contained local web tool for professional Wi‑Fi and cellular site
 surveys on a Mac. Build a coverage heatmap, aim a cellular gateway/antenna, walk
-a property by phone GPS, and print a client-ready PDF — all on your machine, no
+a property by phone GPS, and print a client-ready PDF. All on your machine, no
 cloud or login, nothing to install but Python 3.
 
-> **Full walkthrough:** see **[USER_GUIDE.md](USER_GUIDE.md)** — how to run a
+> **Full walkthrough:** see **[USER_GUIDE.md](USER_GUIDE.md)**, how to run a
 > clean survey end to end, page by page. This README is just the quick start.
 
 ## Start it
 
-**Easiest:** double-click **`start.command`** — it launches the server and opens
+**Easiest:** double-click **`start.command`**. It launches the server and opens
 the dashboard.
 
 **Or from a terminal:**
@@ -23,7 +23,7 @@ Then open <http://127.0.0.1:8765>. Press `Ctrl+C` to stop.
 macOS may offer to install Apple's Command Line Tools the first time. Accept it,
 or run `xcode-select --install` first.
 
-**From your phone:** on the same Wi‑Fi, open `http://<your-mac's-IP>:8765` — this
+**From your phone:** on the same Wi‑Fi, open `http://<your-mac's-IP>:8765`. This
 is what powers the walk-the-property GPS feature. macOS will ask once whether to
 allow incoming connections; that's the phone link, so allow it.
 
@@ -32,7 +32,7 @@ allow incoming connections; that's the phone link, so allow it.
 | Page | Purpose |
 |------|---------|
 | **Live** | Instant signal gauge + one-tap speed test (download / upload / responsiveness) where you're standing. |
-| **Coverage** | Pick a survey type, build a base map (draw / upload / auto-layout / aerial from an address — see **Base maps** below), walk and tap readings, and get a live heatmap with gradient, pass/fail, and labeled contour lines. |
+| **Coverage** | Pick a survey type, build a base map (draw / upload / auto-layout / aerial from an address, see **Base maps** below), walk and tap readings, and get a live heatmap with gradient, pass/fail, and labeled contour lines. |
 | **Cellular** | Aim a home cellular gateway / antenna by RSRP / SINR, with live bars and a speed test. |
 | **GPS** | Stream your phone's GPS to the Mac, drop points and property corners as you walk, export the survey to Google Earth (`.kmz`), or watch it fill in live in Google Earth as you walk. |
 | **Report** | Client details, a 0–100 coverage score with automated findings, site photos, and a one-click PDF. Save / export / re-open surveys here. |
@@ -57,7 +57,7 @@ keep their real position when you change the view.
 ### About the Google Earth option
 
 It needs Google Earth Pro installed on this Mac. The first time you use it,
-macOS asks permission to control Google Earth — **that prompt appears on the
+macOS asks permission to control Google Earth. **That prompt appears on the
 Mac itself**, not on your phone, so someone has to be at the keyboard once.
 
 Every capture measures how accurate it is and tells you, because the answer
@@ -68,10 +68,10 @@ open ground are near-exact. Typical figures:
 
 | Site | Measured | What happens |
 |------|----------|--------------|
-| Open, flat (farmland, mown lot, desert) | under 1 ft | Used without comment — your phone's GPS is the bigger error |
+| Open, flat (farmland, mown lot, desert) | under 1 ft | Used without comment. Your phone's GPS is the bigger error |
 | Suburban with mature trees | around 25 ft | The figure is shown and stamped on the map |
 | Rolling or hilly | around 50 ft | You're asked to confirm before it's used |
-| Steep wooded hillside | 100 ft or more | A second confirm — at that point a reading can land on the neighbour's property |
+| Steep wooded hillside | 100 ft or more | A second confirm: at that point a reading can land on the neighbour's property |
 
 Those are real measurements, not estimates: flat Missouri farmland came out at
 0.6 ft, a wooded Florida suburb at 24 ft, and a Colorado mountainside at 50 ft.
@@ -83,7 +83,7 @@ its own tolerance.
 ## Watch it live in Google Earth
 
 On the **Report** page, **🛰 Live in Google Earth** opens Google Earth Pro and
-keeps it updated every 3 seconds while you walk — readings, boundary, routers
+keeps it updated every 3 seconds while you walk. Readings, boundary, routers
 and the coverage colour appear as you take them.
 
 Two things worth knowing:
@@ -93,15 +93,15 @@ Two things worth knowing:
   untick **3D Buildings** and it fills in. There is no way to fix this from our
   side.
 - **Seeing everything twice?** Google Earth is still holding a survey from an
-  earlier session. In **Temporary Places**, delete the older *WiFi Survey — live
+  earlier session. In **Temporary Places**, delete the older *WiFi Survey: live
   coverage* entries.
 
 ## Exports
 
-- **`.json`** — the full raw survey; re-open to resume or re-print (your master copy).
-- **`.csv`** — every reading as a spreadsheet row.
-- **`.kmz`** — coverage heatmap overlay, readings, boundary and routers for Google Earth.
-- **PDF** — the formatted client report.
+- **`.json`**: the full raw survey; re-open to resume or re-print (your master copy).
+- **`.csv`**: every reading as a spreadsheet row.
+- **`.kmz`**: coverage heatmap overlay, readings, boundary and routers for Google Earth.
+- **PDF**: the formatted client report.
 
 ## Rating scale (RSSI)
 
@@ -123,7 +123,7 @@ noisy link even when RSSI looks fine.
 ./test.sh --net   # also re-verifies Esri and NAIP against the live services
 ```
 
-No install and no dependencies — both use the `node` and `python3` already on
+No install and no dependencies. Both use the `node` and `python3` already on
 the Mac. `check.sh` catches broken syntax and dead references; `test.sh` catches
 wrong answers, which is the failure mode that actually reaches a client report.
 
@@ -136,9 +136,9 @@ wrong answers, which is the failure mode that actually reaches a client report.
 - The live Google Earth view stores a small key at `~/.wifi-survey-live-token`
   (readable only by you) so Google Earth keeps working after the server
   restarts. It lives outside this folder and is not removed by deleting the
-  project. Deleting it is harmless — a new one is made on the next start.
+  project. Deleting it is harmless. A new one is made on the next start.
 - The live view is reachable only from this Mac. The dashboard and the phone GPS
   bridge still work from your phone as normal.
 - If **Make the report** does nothing, allow pop-ups for `127.0.0.1`.
 - The external **Alfa AWUS036ACM** adapter has no Apple-Silicon driver and isn't
-  used — the built-in Wi‑Fi does everything this survey needs.
+  used. The built-in Wi‑Fi does everything this survey needs.

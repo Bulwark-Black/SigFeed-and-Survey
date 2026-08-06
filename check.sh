@@ -12,7 +12,7 @@ echo "→ app.js syntax"
 if command -v node >/dev/null 2>&1; then
   node --check app.js && echo "  ok" || fail=1
 else
-  echo "  (node not installed — skipped)"
+  echo "  (node not installed, skipped)"
 fi
 
 echo "→ survey_server.py syntax"

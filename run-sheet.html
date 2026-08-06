@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Wi-Fi Survey — Field Run Sheet</title>
+<title>Wi-Fi Survey: Field Run Sheet</title>
 <style>
   @page{margin:13mm}
   *{box-sizing:border-box}
@@ -56,8 +56,8 @@
 
 <div class="body">
   <div class="box callout">
-    <b>Start the tool:</b> double-click <b>start.command</b> in the <b>wifi-survey</b> folder — your browser opens the dashboard. Leave it on <b>😀 Easy</b> mode.
-    <br>Two jobs today: <b>①</b> find the best spot to mount the antenna, then <b>②</b> map the house for Wi-Fi dead spots. The app does the heatmap and the report — no other software needed.
+    <b>Start the tool:</b> double-click <b>start.command</b> in the <b>wifi-survey</b> folder. Your browser opens the dashboard. Leave it on <b>😀 Easy</b> mode.
+    <br>Two jobs today: <b>①</b> find the best spot to mount the antenna, then <b>②</b> map the house for Wi-Fi dead spots. The app does the heatmap and the report. No other software needed.
     <br><b>New client?</b> Top-right <b>🗂 survey</b> button → <b>＋ New survey</b> starts a fresh one; each client is saved separately and you can switch back anytime from that same menu.
   </div>
 
@@ -65,7 +65,7 @@
   <ul class="chk">
     <li>MacBook charged; Wi-Fi on and joined to the <b>client's gateway network</b></li>
     <li>Gateway <b>admin password</b> in hand (it's on the sticker on the gateway)</li>
-    <li>Antenna <b>not mounted yet</b> — you'll find the best spot first</li>
+    <li>Antenna <b>not mounted yet</b>: you'll find the best spot first</li>
     <li>Know the rooms/areas the client says are slow</li>
   </ul>
 
@@ -74,8 +74,8 @@
   <ol>
     <li>Scroll to <b>📡 Cellular signal</b>. Leave the address at <b>192.168.12.1</b>, enter the <b>admin password</b>, tap <b>Connect</b>, tick <b>"keep updating."</b> A green <b>✅ Connected</b> badge confirms it, and you'll see <b>signal bars</b> + all the numbers (SINR / RSRP / RSRQ / RSSI) for 5G and LTE.</li>
     <li>Carry the gateway to a candidate spot (near an exterior wall / window / upstairs, wherever the antenna could mount).</li>
-    <li>Want the real internet speed at that spot? Tap <b>⚡ Test connection speed</b> (~20 s) — it shows the actual download/upload you're getting through the gateway.</li>
-    <li><b>Wait ~15 seconds</b> for the numbers to settle — cellular lags.</li>
+    <li>Want the real internet speed at that spot? Tap <b>⚡ Test connection speed</b> (~20 s). It shows the actual download/upload you're getting through the gateway.</li>
+    <li><b>Wait ~15 seconds</b> for the numbers to settle. Cellular lags.</li>
     <li>Type the spot name (e.g. "SE wall," "attic") and tap <b>＋ LOG</b>.</li>
     <li>Repeat for each candidate spot. The app <b>flags the best one ★</b> and puts the recommendation in the report.</li>
   </ol>
@@ -84,16 +84,16 @@
     <tr><td><b>SINR</b> (pick by this)</td><td>≥ 20</td><td>13–20</td><td>0–13</td><td>below 0</td></tr>
     <tr><td><b>RSRP</b> (strength)</td><td>≥ −80</td><td>−80 to −90</td><td>−90 to −100</td><td>below −100</td></tr>
   </table>
-  <div class="box warn"><b>If SINR won't beat ~5 anywhere:</b> the area just has weak T-Mobile coverage — try higher up or a wall facing the nearest tower, and note it for the client.</div>
+  <div class="box warn"><b>If SINR won't beat ~5 anywhere:</b> the area just has weak T-Mobile coverage. Try higher up or a wall facing the nearest tower, and note it for the client.</div>
 
   <h2><span class="n">2</span> Map the house (Wi-Fi dead spots)</h2>
   <p class="lead">Build the layout once, then walk and tap. The colored heatmap fills in as you go.</p>
   <ol>
     <li>Open <b>🗺️ Coverage</b> from the left nav and pick what you're surveying.</li>
     <li>In the <b>Coverage Map</b> card, choose one:
-      <br>• <b>✏️ Draw a schematic</b> — add rooms, drag to arrange, resize the corner, ✎ rename. For an odd-shaped room (L-shaped, angled) tap <b>◇ Shape room</b> and tap each corner, then <b>✓ Finish shape</b>. Enter the home's <b>total sq ft</b> if you know it.
+      <br>• <b>✏️ Draw a schematic</b>: add rooms, drag to arrange, resize the corner, ✎ rename. For an odd-shaped room (L-shaped, angled) tap <b>◇ Shape room</b> and tap each corner, then <b>✓ Finish shape</b>. Enter the home's <b>total sq ft</b> if you know it.
       <br>• <b>📐 Upload a photo/sketch</b> of the floor plan instead.
-      <br>• <b>🛰 Aerial from address</b> (outdoor / land surveys) — type the property address, tap Find, and a satellite image loads. Connect your phone on the <b>📍 GPS</b> page, then walk the property: a <b>blue "you are here" dot</b> shows where you're standing on the aerial. Tap <b>📍 Mark my GPS spot</b> to drop a reading at your location, and to map the lot line, tap <b>▱ Draw perimeter</b> then stand on each corner and tap <b>＋ Corner at my GPS</b>. Use <b>−／＋</b> for a wider/closer view. Want it in Google Earth? Report page → <b>🌍 Export for Google Earth</b>.</li>
+      <br>• <b>🛰 Aerial from address</b> (outdoor / land surveys). Type the property address, tap Find, and a satellite image loads. Connect your phone on the <b>📍 GPS</b> page, then walk the property: a <b>blue "you are here" dot</b> shows where you're standing on the aerial. Tap <b>📍 Mark my GPS spot</b> to drop a reading at your location, and to map the lot line, tap <b>▱ Draw perimeter</b> then stand on each corner and tap <b>＋ Corner at my GPS</b>. Use <b>−／＋</b> for a wider/closer view. Want it in Google Earth? Report page → <b>🌍 Export for Google Earth</b>.</li>
     <li>Switch to <b>📍 Take readings</b>. Walk to a room, stand in the middle, wait for the dial to settle.</li>
     <li><b>Tap the map where you're standing.</b> That drops a colored dot AND logs the reading:
       <br><span class="sw exc"></span><b>E</b> EXCELLENT &nbsp; <span class="sw good"></span><b>G</b> GOOD &nbsp; <span class="sw fair"></span><b>W</b> WEAK &nbsp; <span class="sw poor"></span><b>D</b> DEAD ZONE
@@ -124,8 +124,8 @@
 
   <h2><span class="n">3</span> Finish &amp; deliver</h2>
   <ul class="chk">
-    <li>On the <b>📄 Report</b> page, fill in the <b>client / owner name + property address</b> at the top — they print on the report cover</li>
-    <li>Add any <b>📸 photos / screenshots</b> (router spot, wiring, speed tests) — tap <b>＋ Add photos</b>, give each a caption; they appear in the PDF</li>
+    <li>On the <b>📄 Report</b> page, fill in the <b>client / owner name + property address</b> at the top. They print on the report cover</li>
+    <li>Add any <b>📸 photos / screenshots</b> (router spot, wiring, speed tests). Tap <b>＋ Add photos</b>, give each a caption; they appear in the PDF</li>
     <li>Tap <b>📄 MAKE THE REPORT</b> → in the new tab, <b>Print / Save as PDF</b></li>
     <li>The PDF already includes it all: <b>coverage heatmap, room-by-room table, antenna-placement pick, and findings</b></li>
     <li>Tap <b>⬇︎ Save survey file</b> to keep the raw data (re-open it later to reprint)</li>
@@ -135,6 +135,6 @@
   <div class="box tip"><b>Handy:</b> Switch to <b>⚙️ Advanced</b> anytime for exact numbers, a nearby-network / channel check, and a per-room <b>throughput (speed) test</b>. The <b>🩺 Wireless Diag</b> button opens Apple's built-in scanner for a second opinion.</div>
 </div>
 
-<footer>Wi-Fi Site Survey mission-control field run sheet. Signal readings are point-in-time and vary with position, orientation, and interference — take a second reading in tricky rooms.</footer>
+<footer>Wi-Fi Site Survey mission-control field run sheet. Signal readings are point-in-time and vary with position, orientation, and interference. Take a second reading in tricky rooms.</footer>
 </body>
 </html>

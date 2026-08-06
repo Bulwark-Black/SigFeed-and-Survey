@@ -456,7 +456,7 @@ def action_cellular(ip, username, password):
         return {"ok": False, "error": "Gateway rejected the password (HTTP %s). Check the admin password." % st}
     if st != 200:
         return {"ok": False, "error": "Gateway returned HTTP %s%s"
-                % (st, " — " + login_error if login_error else "")}
+                % (st, ". " + login_error if login_error else "")}
     try:
         d = json.loads(body)
     except ValueError:
@@ -529,7 +529,7 @@ def action_gps_push(params, body):
     # an app sending microdegrees otherwise stores a "valid" fix that quietly puts readings in
     # the wrong hemisphere — the GPS badge still reads fresh and nothing downstream notices.
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
-        return {"ok": False, "error": "lat/lon out of range — check the URL template in your GPS app"}
+        return {"ok": False, "error": "lat/lon out of range. Check the URL template in your GPS app"}
     global _gps_fix
     with _gps_lock:
         _gps_fix = {"lat": lat, "lon": lon, "acc": acc,
@@ -849,7 +849,7 @@ def _earth_tell(body, timeout=45):
             raise RuntimeError("macOS hasn't allowed this to control Google Earth yet. "
                                "Approve the prompt ON THE MAC itself, then try again.")
         if "-2753" in msg or "-1728" in msg:
-            raise RuntimeError("Couldn't talk to Google Earth Pro — is it installed?")
+            raise RuntimeError("Couldn't talk to Google Earth Pro. Is it installed?")
         raise RuntimeError(msg)
     return out.strip()
 
@@ -962,7 +962,7 @@ def _earth_fit(pts):
         "north": (nw[0] + ne[0]) / 2,
     }
     if not (box["west"] < box["east"] and box["south"] < box["north"]):
-        raise RuntimeError("Google Earth returned an inside-out view — try again.")
+        raise RuntimeError("Google Earth returned an inside-out view. Try again.")
 
     my_n, my_s = _merc_y(box["north"]), _merc_y(box["south"])
     worst, total, cnt = 0.0, 0.0, 0
@@ -1013,9 +1013,9 @@ def _earth_worker(lat, lon, span_m):
         # A cold frame reports elevation exactly 0.0 everywhere. Genuine sea level is possible but
         # it is never EXACTLY zero across all 81 probes.
         if all(p[4] == 0.0 for p in pts):
-            raise RuntimeError("Google Earth hasn't loaded imagery here yet — try again.")
+            raise RuntimeError("Google Earth hasn't loaded imagery here yet. Try again.")
         if min(p[4] for p in pts) < -50.0:
-            raise RuntimeError("This view is mostly water — Google Earth returns sea-floor depth "
+            raise RuntimeError("This view is mostly water. Google Earth returns sea-floor depth "
                                "there, which can't be used to position a map.")
         box, acc = _earth_fit(pts)
 
@@ -1052,7 +1052,7 @@ def _earth_worker(lat, lon, span_m):
         skew = abs((ground_h / ground_w) / (float(img_h) / img_w) - 1.0)
         if skew > 0.05:
             raise RuntimeError("The picture's shape doesn't match the ground it covers "
-                               "(off by %.0f%%) — not using it." % (skew * 100))
+                               "(off by %.0f%%), so it is not being used." % (skew * 100))
 
         with _earth_lock:
             _earth["result"] = {
@@ -1108,7 +1108,7 @@ def action_earth_start(lat, lon, span):
         # returns, putting another address's imagery under this survey's readings.
         if _earth["running"]:
             return {"ok": False, "busy": True,
-                    "error": "A capture is already running — wait for it to finish."}
+                    "error": "A capture is already running. Wait for it to finish."}
         _earth.update({"running": True, "phase": "starting", "result": None,
                        "error": None, "started": time.time()})
     threading.Thread(target=_earth_worker, args=(lat, lon, span), daemon=True).start()
@@ -1237,7 +1237,7 @@ def live_kml():
     stamp = datetime.fromtimestamp(updated).strftime("%H:%M:%S") if updated else "not started"
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
-            '<name>WiFi Survey — live (%s)</name>%s</Document></kml>' % (stamp, doc)).encode("utf-8")
+            '<name>WiFi Survey live (%s)</name>%s</Document></kml>' % (stamp, doc)).encode("utf-8")
 
 
 def live_loader_kml():
@@ -1249,7 +1249,7 @@ def live_loader_kml():
     """
     return ('<?xml version="1.0" encoding="UTF-8"?>\n'
             '<kml xmlns="http://www.opengis.net/kml/2.2"><NetworkLink>'
-            '<name>WiFi Survey — live coverage</name>'
+            '<name>WiFi Survey live coverage</name>'
             '<open>1</open><flyToView>0</flyToView><refreshVisibility>0</refreshVisibility>'
             '<Link><href>http://127.0.0.1:%d/api/live.kml?k=%s</href>'
             '<refreshMode>onInterval</refreshMode><refreshInterval>%d</refreshInterval>'
@@ -1353,7 +1353,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "expected application/json"}, 415)
                 return False
         if not self._key_ok(query):
-            self._send_json({"ok": False, "error": "missing or bad key — reload the dashboard"}, 403)
+            self._send_json({"ok": False, "error": "missing or bad key. Reload the dashboard"}, 403)
             return False
         return True
 
@@ -1537,11 +1537,11 @@ def main():
         srv = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as e:
         print("Couldn't start on port %d: %s" % (PORT, e))
-        print("It's probably already running — open http://localhost:%d" % PORT)
+        print("It's probably already running. Open http://localhost:%d" % PORT)
         raise SystemExit(1)
     print("WiFi Survey mission-control:  http://localhost:%d" % PORT)
     print("On your phone (same Wi-Fi):   http://%s:%d" % (lan_ip(), PORT))
-    print("Phone GPS bridge — the exact URL to paste is on the GPS page.")
+    print("Phone GPS bridge: the exact URL to paste is on the GPS page.")
     if not LIVE_TOKEN_PERSISTED:
         print("Note: couldn't save %s, so the Google Earth live view will need re-opening\n"
               "      from the dashboard after every restart of this server." % LIVE_TOKEN_PATH)
