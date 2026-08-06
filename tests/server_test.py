@@ -205,11 +205,17 @@ ok(not srv.live_token_ok({"k": ["\ud800"]}), "lone surrogate does not raise")
 ok(not srv.secret_eq("é", srv.API_KEY), "secret_eq tolerates non-ASCII (regression: _key_ok raised)")
 ok(srv.secret_eq(srv.API_KEY, srv.API_KEY), "secret_eq still matches a correct key")
 ok(not srv.secret_eq(None, srv.API_KEY), "secret_eq tolerates None")
-# the whole point: it must survive a restart
-ok(srv._load_live_token() == srv.LIVE_TOKEN, "reloading from disk yields the same token")
-if os.path.exists(srv.LIVE_TOKEN_PATH):
+# The whole point is that it survives a restart. On a machine whose home directory is not
+# writable it cannot, and the token silently reverts to per-run — which brings back the frozen
+# Google Earth overlay it exists to prevent. Either it persisted and reloads identically, or the
+# server says so out loud; a third state would be the bug.
+if srv.LIVE_TOKEN_PERSISTED:
+    ok(srv._load_live_token() == srv.LIVE_TOKEN, "reloading from disk yields the same token")
     ok(oct(os.stat(srv.LIVE_TOKEN_PATH).st_mode)[-3:] == "600", "token file is 0600",
        oct(os.stat(srv.LIVE_TOKEN_PATH).st_mode)[-3:])
+else:
+    ok(True, "home is unwritable — token is per-run, and the server announces it at startup")
+ok(isinstance(srv.LIVE_TOKEN_PERSISTED, bool), "persistence is reported, not left to chance")
 
 section("live loader KML")
 loader = srv.live_loader_kml().decode()

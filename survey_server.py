@@ -1147,7 +1147,18 @@ _live = {"doc": "", "overlay": b"", "version": 0, "updated": 0.0}
 LIVE_TOKEN_PATH = os.path.join(os.path.expanduser("~"), ".wifi-survey-live-token")
 
 
+LIVE_TOKEN_PERSISTED = False
+
+
 def _load_live_token():
+    """Read the persistent live-feed token, creating it if absent.
+
+    Sets LIVE_TOKEN_PERSISTED. If the home directory is unwritable the token silently becomes
+    per-run again, which quietly reintroduces the failure it exists to prevent: Google Earth
+    keeps its NetworkLink across restarts, the old token 403s, and it goes on redrawing its last
+    frame with nothing saying it is frozen. Callers announce that rather than let it pass.
+    """
+    global LIVE_TOKEN_PERSISTED
     try:
         with open(LIVE_TOKEN_PATH, "r") as fh:
             tok = fh.read().strip()
@@ -1158,6 +1169,7 @@ def _load_live_token():
                 os.chmod(LIVE_TOKEN_PATH, 0o600)
             except OSError:
                 pass
+            LIVE_TOKEN_PERSISTED = True
             return tok
     except OSError:
         pass
@@ -1166,8 +1178,9 @@ def _load_live_token():
         fd = os.open(LIVE_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             fh.write(tok)
+        LIVE_TOKEN_PERSISTED = True
     except OSError:
-        pass        # unwritable home: the token still works for this run
+        LIVE_TOKEN_PERSISTED = False    # works for this run; will not survive a restart
     return tok
 
 
@@ -1529,6 +1542,9 @@ def main():
     print("WiFi Survey mission-control:  http://localhost:%d" % PORT)
     print("On your phone (same Wi-Fi):   http://%s:%d" % (lan_ip(), PORT))
     print("Phone GPS bridge — the exact URL to paste is on the GPS page.")
+    if not LIVE_TOKEN_PERSISTED:
+        print("Note: couldn't save %s, so the Google Earth live view will need re-opening\n"
+              "      from the dashboard after every restart of this server." % LIVE_TOKEN_PATH)
     print("Press Ctrl+C to stop.")
     try:
         srv.serve_forever()
