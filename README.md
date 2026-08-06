@@ -126,7 +126,16 @@ noisy link even when RSSI looks fine.
 ## Layout
 
 ```
-survey_server.py   local HTTP server: native macOS tools, imagery proxies, Google Earth
+survey_server.py   entry point: the HTTP handler and main()
+wifisurvey/        the back end, split by concern
+  config.py        bind address, per-run API key, what may be served or launched
+  util.py          subprocess and HTTP helpers, constant-time secret compare
+  wifi.py          scan, link quality, speed test, ping, app launching
+  cellular.py      gateway polling for antenna aiming
+  gps.py           phone GPS bridge
+  imagery.py       geocoding, the Esri tile proxy, USDA NAIP
+  earth.py         driving Google Earth Pro over AppleScript
+  live.py          the live coverage feed Google Earth polls
 dashboard.html     the whole UI
 js/                the front end, as ES modules
   state.js         shared survey state; reads are plain, writes go through set.*
