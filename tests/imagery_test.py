@@ -10,6 +10,9 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# the back end is a package next to survey_server.py; loading the entry point by path
+# does not put its directory on sys.path
+sys.path.insert(0, ROOT)
 spec = importlib.util.spec_from_file_location("srv", os.path.join(ROOT, "survey_server.py"))
 srv = importlib.util.module_from_spec(spec)
 sys.modules["srv"] = srv
