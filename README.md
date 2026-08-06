@@ -118,9 +118,30 @@ noisy link even when RSSI looks fine.
 ## Checks
 
 ```bash
-./check.sh        # syntax, dangling DOM ids, dead inline handlers
+./check.sh        # module syntax, import graph, dangling DOM ids, dead inline handlers
 ./test.sh         # coordinate maths, KMZ writer, export contents, server logic, auth
 ./test.sh --net   # also re-verifies Esri and NAIP against the live services
+```
+
+## Layout
+
+```
+survey_server.py   local HTTP server: native macOS tools, imagery proxies, Google Earth
+dashboard.html     the whole UI
+js/                the front end, as ES modules
+  state.js         shared survey state; reads are plain, writes go through set.*
+  core.js          ratings, gauges, toasts, the backend call wrapper, page switching
+  live.js          live signal page, capturing readings, speed test
+  cellular.js      gateway aiming, placement spots, site photos
+  heatmap.js       the coverage engine: IDW grid, contours, map rendering
+  basemap.js       Esri aerial, Google Earth capture, NAIP, reprojection
+  planner.js       levels, schematic editor, rooms, AP marks, calibration, perimeter
+  gps.js           phone GPS bridge, profile switcher, persistence
+  earth.js         KMZ export and the live Google Earth feed
+  report.js        the client report and findings engine
+  ingest.js        importing surveys, scan CSVs, packet captures
+  pages.js         guide, Site Plan, Mission Control home
+  main.js          entry point: exposes inline-handler functions, then boots
 ```
 
 No install and no dependencies. Both use the `node` and `python3` already on

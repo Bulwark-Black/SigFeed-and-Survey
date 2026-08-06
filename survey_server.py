@@ -62,7 +62,8 @@ LAUNCHABLE = {
     "wireless-diagnostics": "Wireless Diagnostics",
 }
 
-STATIC = {"/": "dashboard.html", "/app.js": "app.js", "/run-sheet.html": "run-sheet.html"}
+STATIC = {"/": "dashboard.html", "/run-sheet.html": "run-sheet.html"}
+JS_MODULE_RE = re.compile(r"/js/[a-z][a-z0-9_-]*\.js")
 
 
 # ---------------------------------------------------------------------------
@@ -1431,6 +1432,13 @@ class Handler(BaseHTTPRequestHandler):
             if not self._host_ok():
                 return self.send_error(403)
             return self._send_file(STATIC[u.path])
+        # The front end is a handful of ES modules under js/. The name pattern allows no dot and
+        # no slash, so "..", absolute paths and nested lookups are simply unexpressible rather
+        # than filtered, which is the same posture as the rest of this server.
+        if JS_MODULE_RE.fullmatch(u.path):
+            if not self._host_ok():
+                return self.send_error(403)
+            return self._send_file(os.path.join("js", os.path.basename(u.path)))
         if not u.path.startswith("/api/"):
             return self.send_error(404)
         # The live feed is checked before _guard because Google Earth carries the persistent

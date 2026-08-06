@@ -125,7 +125,10 @@ section("committed vs saved — a quota failure must still rebase the pins");
   // adoptAerial swaps geoBounds and the on-screen image BEFORE it tries to persist, so
   // "didn't save" is not "nothing happened". zoomAerial gated on ok, which meant a storage-full
   // rebuild left every reading pinned to the previous frame, describing different ground.
-  const src = require("fs").readFileSync(require("path").join(__dirname, "..", "app.js"), "utf8");
+  const fs2 = require("fs"), path2 = require("path");
+  const dir = path2.join(__dirname, "..", "js");
+  const src = fs2.readdirSync(dir).filter(f => f.endsWith(".js")).sort()
+    .map(f => fs2.readFileSync(path2.join(dir, f), "utf8")).join("\n");
   ok(/return \{ ok: false, committed: adopted\.ok, gaps/.test(src),
      "a failed save still reports whether the frame went live");
   ok(/return \{ ok: false, committed: false, gaps/.test(src),
