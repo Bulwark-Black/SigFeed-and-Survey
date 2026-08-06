@@ -117,6 +117,55 @@ function updateGauge(signal, r) {
 // needle tip radius 92, f=0 -> left/180deg, f=1 -> right/0deg. Direct-tip needle (NO rotate).
 let speedMax = 500; // current dial full-scale (Mbps); auto-scaled per run via niceMax()
 
+/* ---------- shared state writes ---------- */
+// These are the module-level values more than one area of the app both reads and writes.
+// Reads stay plain (`points`), writes go through `set` (`set.points(...)`).
+//
+// The asymmetry is deliberate and it is what makes splitting this file safe: once these live
+// in their own module, an imported binding can be read but never assigned, so any write that
+// was missed is a hard parse error rather than a value that silently stops propagating.
+const set = {
+  points: (v) => { points = v; },
+  levels: (v) => { levels = v; },
+  activeLevel: (v) => { activeLevel = v; },
+  cellPoints: (v) => { cellPoints = v; },
+  planMode: (v) => { planMode = v; },
+  lastGpsFix: (v) => { lastGpsFix = v; },
+  perimeter: (v) => { perimeter = v; },
+  apMarks: (v) => { apMarks = v; },
+  geoBounds: (v) => { geoBounds = v; },
+  heatmapDataUrl: (v) => { heatmapDataUrl = v; },
+  surveyEnv: (v) => { surveyEnv = v; },
+  reportPhotos: (v) => { reportPhotos = v; },
+  mapMode: (v) => { mapMode = v; },
+  lastScan: (v) => { lastScan = v; },
+  lastCell: (v) => { lastCell = v; },
+  importedScan: (v) => { importedScan = v; },
+  floorPlanUrl: (v) => { floorPlanUrl = v; },
+  floorPlanImg: (v) => { floorPlanImg = v; },
+  reqProfile: (v) => { reqProfile = v; },
+  rooms: (v) => { rooms = v; },
+  calibration: (v) => { calibration = v; },
+  calTemp: (v) => { calTemp = v; },
+  lastAerial: (v) => { lastAerial = v; },
+  placingId: (v) => { placingId = v; },
+  shapeVerts: (v) => { shapeVerts = v; },
+  predictAPs: (v) => { predictAPs = v; },
+  showPredict: (v) => { showPredict = v; },
+  showHeatmap: (v) => { showHeatmap = v; },
+  showContours: (v) => { showContours = v; },
+  heatMetric: (v) => { heatMetric = v; },
+  heatMode: (v) => { heatMode = v; },
+  heatPreset: (v) => { heatPreset = v; },
+  sitePlan: (v) => { sitePlan = v; },
+  siteMode: (v) => { siteMode = v; },
+  gpsEnabled: (v) => { gpsEnabled = v; },
+  plExponent: (v) => { plExponent = v; },
+  speedMax: (v) => { speedMax = v; },
+  activeProfile: (v) => { activeProfile = v; },
+};
+
+
 // smallest "nice" full-scale >= v*1.1, so the needle never pegs and the dial stays readable
 function niceMax(v) {
   const steps = [50, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000];
@@ -199,7 +248,7 @@ function animateSpeedNeedle(mbps, max) {
 function trackSpeed(mbps) {
   if (mbps > speedMax * 0.98) {
     const grown = niceMax(mbps);
-    if (grown !== speedMax) { speedMax = grown; buildSpeedTicks(speedMax); }
+    if (grown !== speedMax) { set.speedMax(grown); buildSpeedTicks(speedMax); }
   }
   updateSpeedGauge(mbps, speedMax);
 }
@@ -224,7 +273,7 @@ async function runSpeedTest() {
   if (!b || speedPolling) return;
   b.disabled = true;
   b.innerHTML = '<span class="spin"></span>&nbsp; Starting…';
-  speedMax = 100;
+  set.speedMax(100);
   buildSpeedTicks(speedMax);
   updateSpeedGauge(0, speedMax);
   $("speedBig").textContent = "…";
@@ -274,7 +323,7 @@ async function runSpeedTest() {
 
     if (s.phase === "done" && s.result) {
       const d = s.result, dl = d.download_mbps;
-      speedMax = niceMax(Math.max(dl || 0, d.upload_mbps || 0));
+      set.speedMax(niceMax(Math.max(dl || 0, d.upload_mbps || 0)));
       buildSpeedTicks(speedMax);
       animateSpeedNeedle(dl, speedMax);      // settle on the headline download figure
       if ($("speedSub")) $("speedSub").textContent = "Download speed";
@@ -404,7 +453,7 @@ async function poll() {
   try {
     const d = await api("/api/scan");
     if (!d.ok) throw new Error();
-    lastScan = d;
+    set.lastScan(d);
     const c = d.current;
     const r = rate(c ? c.signal : null, c ? c.snr : null);
     updateGauge(c ? c.signal : null, r);
@@ -514,11 +563,11 @@ async function launch(app) {
 // overwrite it: the first one is the honest answer to "what was the air like during the survey".
 function captureSurveyEnv() {
   if (surveyEnv || !lastScan || !lastScan.current) return;
-  surveyEnv = {
+  set.surveyEnv({
     current: lastScan.current,
     nearby: lastScan.nearby || [],
     ts: new Date().toISOString(),
-  };
+  });
   store(LS_SURVEYENV, JSON.stringify(surveyEnv));
 }
 
@@ -575,7 +624,7 @@ async function captureAdv() {
 
 // Start (or cancel) placing an already-saved reading onto the map.
 function startPlacing(id) {
-  placingId = placingId === id ? null : id;
+  set.placingId(placingId === id ? null : id);
   if (placingId != null) {
     const p = points.find((q) => q.id === placingId);
     if (mapMode === "edit") setMapMode("survey");
@@ -731,7 +780,7 @@ function setSum(which, val, color, sub) {
 }
 
 function delPoint(id) {
-  points = points.filter((p) => p.id !== id);
+  set.points(points.filter((p) => p.id !== id));
   savePoints();
   renderPoints();
   renderCoverageMap();
@@ -752,11 +801,11 @@ function clearAll() {
   if (!bits.length) return toast("Nothing to clear.");
   const what = bits.length > 1 ? bits.slice(0, -1).join(", ") + " and " + bits[bits.length - 1] : bits[0];
   if (!confirm(`Start over?\n\nClears ${what}.\n\nClient and site details are kept. This can't be undone.`)) return;
-  points = [];
-  cellPoints = [];
-  reportPhotos = [];
-  importedScan = [];
-  surveyEnv = null;                    // the next walk records its own environment
+  set.points([]);
+  set.cellPoints([]);
+  set.reportPhotos([]);
+  set.importedScan([]);
+  set.surveyEnv(null);                    // the next walk records its own environment
   try { localStorage.removeItem(LS_SURVEYENV); } catch (e) {}
   levels.forEach((l) => (l.snapshot = null));
   savePoints();
@@ -869,7 +918,7 @@ async function connectCell() {
       if (!lastCell) $("cellResults").classList.add("hidden");
     } else {
       cellFails = 0;
-      lastCell = d;
+      set.lastCell(d);
       renderCell(d);
       renderCellSpots();
       $("cellResults").classList.remove("hidden");
@@ -1095,7 +1144,7 @@ function renderCellSpots() {
 }
 
 function delCellSpot(id) {
-  cellPoints = cellPoints.filter((p) => p.id !== id);
+  set.cellPoints(cellPoints.filter((p) => p.id !== id));
   saveCellPoints();
   renderCellSpots();
 }
@@ -1106,7 +1155,7 @@ function attachHeatmap(ev) {
   if (!file) return;
   const r = new FileReader();
   r.onload = () => {
-    heatmapDataUrl = r.result;
+    set.heatmapDataUrl(r.result);
     renderHeatmapThumb();
     // Still usable this session if it won't fit, but the user has to know it won't survive a reload.
     try { localStorage.setItem(LS_HEATMAP, heatmapDataUrl); toast("Heatmap attached. It'll appear in the report"); }
@@ -1117,7 +1166,7 @@ function attachHeatmap(ev) {
 }
 
 function removeHeatmap() {
-  heatmapDataUrl = null;
+  set.heatmapDataUrl(null);
   try { localStorage.removeItem(LS_HEATMAP); } catch (e) {}
   renderHeatmapThumb();
 }
@@ -1497,7 +1546,7 @@ function drawRequirementOverlay(ctx, W, H, mapped) {
   ctx.restore();
 }
 function setReqProfile(v) {
-  reqProfile = v;
+  set.reqProfile(v);
   renderCoverageMap();
   updateAreaPassing();
 }
@@ -1676,15 +1725,15 @@ function drawPredictBadge(ctx, W, H) {
   ctx.fillStyle = "#04140f"; ctx.fillText(t, 21, 26);
   ctx.restore();
 }
-function setHeatMetric(v) { heatMetric = v; renderHeatUI(); renderCoverageMap(); }
+function setHeatMetric(v) { set.heatMetric(v); renderHeatUI(); renderCoverageMap(); }
 function setHeatMode(v) {
-  heatMode = v;
+  set.heatMode(v);
   if ($("heatPreset")) $("heatPreset").classList.toggle("hidden", v !== "passfail");
   if ($("heatCmapSel")) $("heatCmapSel").classList.toggle("hidden", v === "passfail");
   renderHeatUI();
   renderCoverageMap();
 }
-function setHeatPreset(v) { heatPreset = v; renderHeatUI(); renderCoverageMap(); }
+function setHeatPreset(v) { set.heatPreset(v); renderHeatUI(); renderCoverageMap(); }
 function setHeatColormap(v) { heatColormap = v; renderHeatUI(); renderCoverageMap(); }
 // What the letter inside each reading dot means. Spelling it out is what makes the marker's
 // second channel usable rather than mysterious.
@@ -1855,8 +1904,8 @@ function loadFloorPlan(ev) {
       const url = c.toDataURL("image/jpeg", 0.82);
       // a freshly uploaded image has its own scale — it must NOT inherit a previous aerial's GPS
       // scale (getScale checks geoBounds first) or a manual calibration from a different image.
-      calibration = null; calTemp = { a: null, b: null };
-      geoBounds = null;
+      set.calibration(null); set.calTemp({ a: null, b: null });
+      set.geoBounds(null);
       if (curLevel()) { curLevel().cal = null; curLevel().geo = null; }
       setFloorPlan(url);
       toast("Floor plan added. Tap where you're standing");
@@ -1932,12 +1981,12 @@ function adoptAerial(dataUrl, bounds, meta) {
     return { ok: false, saved: false };
   }
 
-  geoBounds = bounds;
+  set.geoBounds(bounds);
   // An aerial carries true scale, so any manual ruler left over from an uploaded plan is now
   // dead weight — and getScale() prefers geoBounds anyway, so a stale cal would sit there
   // looking authoritative while being ignored. loadFloorPlan already clears these; this didn't.
-  calibration = null; calTemp = { a: null, b: null };
-  lastAerial = meta || null;
+  set.calibration(null); set.calTemp({ a: null, b: null });
+  set.lastAerial(meta || null);
   const L = curLevel();
   if (L) { L.geo = bounds; L.aerial = lastAerial; L.cal = null; }
 
@@ -2423,12 +2472,12 @@ function markGpsSpot() {
 }
 
 function setFloorPlan(url) {
-  planMode = "image";
-  floorPlanUrl = url;
+  set.planMode("image");
+  set.floorPlanUrl(url);
   if (curLevel()) { curLevel().planMode = "image"; curLevel().floorPlanUrl = url; saveLevels(); }
   if ($("mapWrap")) $("mapWrap").classList.remove("schematic");
   if ($("schematicBar")) $("schematicBar").classList.add("hidden");
-  floorPlanImg = new Image();
+  set.floorPlanImg(new Image());
   floorPlanImg.onload = () => {
     if ($("planEmpty")) $("planEmpty").classList.add("hidden");
     if ($("planArea")) $("planArea").classList.remove("hidden");
@@ -2449,7 +2498,7 @@ function onMapTap(ev) {
   // poisons every interpolation cell it touches downstream.
   if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 1 || y < 0 || y > 1) return;
   if (mapMode === "cal") {
-    if (!calTemp.a || calTemp.b) { calTemp = { a: { x, y }, b: null }; setCalStep("Now tap the other end of that same distance."); }
+    if (!calTemp.a || calTemp.b) { set.calTemp({ a: { x, y }, b: null }); setCalStep("Now tap the other end of that same distance."); }
     else { calTemp.b = { x, y }; setCalStep("done"); }
     renderCoverageMap();
     return;
@@ -2490,12 +2539,12 @@ function onMapTap(ev) {
       savePoints();
       const left = unplacedPoints().length;
       toast(left ? `Placed “${p.location}”. ${left} still to place` : `Placed “${p.location}”. That's all of them`);
-      placingId = left ? unplacedPoints()[0].id : null;
+      set.placingId(left ? unplacedPoints()[0].id : null);
       renderPoints();
       renderCoverageMap();
       return;
     }
-    placingId = null;
+    set.placingId(null);
   }
   if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal. Are you connected?");
   const label = $("easyRoom").value.trim() || "Point " + (mappedPoints(points).length + 1);
@@ -2516,12 +2565,12 @@ function toggleDrop(btn) {
 function closeDrops() { document.querySelectorAll(".dropmenu").forEach((m) => m.classList.add("hidden")); }
 
 function toggleHeatmap() {
-  showHeatmap = !showHeatmap;
+  set.showHeatmap(!showHeatmap);
   renderCoverageMap();
 }
 // labeled iso-signal contour lines over the heatmap — reads like a pro RF survey
 function toggleContours() {
-  showContours = $("contourChk") && $("contourChk").checked;
+  set.showContours($("contourChk") && $("contourChk").checked);
   renderCoverageMap();
 }
 // crisp-edges rendering for low-res / hand-drawn floor-plan images (keeps lines hard)
@@ -2593,10 +2642,10 @@ function saveLevels() {
 }
 function initLevels() {
   if (!levels.length) {
-    levels = [{ id: "L1", name: "Main floor", planMode: null, floorPlanUrl: null, rooms: [], perimeter: [], apMarks: [], sqft: "", snapshot: null }];
-    activeLevel = "L1";
+    set.levels([{ id: "L1", name: "Main floor", planMode: null, floorPlanUrl: null, rooms: [], perimeter: [], apMarks: [], sqft: "", snapshot: null }]);
+    set.activeLevel("L1");
   }
-  if (!activeLevel || !curLevel()) activeLevel = levels[0].id;
+  if (!activeLevel || !curLevel()) set.activeLevel(levels[0].id);
 }
 // mirror the active working state (base map) back into the current level object
 function saveLevelMap() {
@@ -2619,25 +2668,25 @@ function saveLevelMap() {
 }
 // load a level's base map into the working state + reset the map UI
 function applyLevelMap(L) {
-  planMode = L.planMode || null;
-  floorPlanUrl = L.floorPlanUrl || null;
-  geoBounds = L.geo || null;   // restore aerial geo-bounds (null for schematic / uploaded-image levels)
+  set.planMode(L.planMode || null);
+  set.floorPlanUrl(L.floorPlanUrl || null);
+  set.geoBounds(L.geo || null);   // restore aerial geo-bounds (null for schematic / uploaded-image levels)
   // Surveys saved before L.aerial existed have geo but no source metadata. Every one of those is
   // an Esri tile frame and its centre is exactly the centre of its own box, so rebuild the record
   // instead of leaving the zoom buttons pointing at nothing.
-  lastAerial = L.aerial || (L.geo ? {
+  set.lastAerial(L.aerial || (L.geo ? {
     source: "esri", z: L.geo.z,
     lat: tile2lat((mercWorldY(L.geo.north, L.geo.z) + mercWorldY(L.geo.south, L.geo.z)) / 2, L.geo.z),
     lon: (L.geo.west + L.geo.east) / 2,
-  } : null);
-  calibration = L.cal || null;   // restore the manual scale reference
-  calTemp = { a: null, b: null };
-  predictAPs = L.predictAPs || [];
-  showPredict = false;
-  rooms = L.rooms || [];
-  perimeter = L.perimeter || [];
-  apMarks = L.apMarks || [];
-  floorPlanImg = null;
+  } : null));
+  set.calibration(L.cal || null);   // restore the manual scale reference
+  set.calTemp({ a: null, b: null });
+  set.predictAPs(L.predictAPs || []);
+  set.showPredict(false);
+  set.rooms(L.rooms || []);
+  set.perimeter(L.perimeter || []);
+  set.apMarks(L.apMarks || []);
+  set.floorPlanImg(null);
   $("mapWrap").classList.remove("schematic");
   $("schematicBar").classList.add("hidden");
   if ($("roomsLayer")) $("roomsLayer").innerHTML = "";
@@ -2664,7 +2713,7 @@ function applyLevelMap(L) {
 function switchLevel(id) {
   if (id === activeLevel) return;
   saveLevelMap();
-  activeLevel = id;
+  set.activeLevel(id);
   applyLevelMap(curLevel());
   renderLevelTabs();
   renderPoints();
@@ -2675,7 +2724,7 @@ function addLevel() {
   saveLevelMap();
   const id = newLevelId();
   levels.push({ id, name: "Floor " + (levels.length + 1), planMode: null, floorPlanUrl: null, rooms: [], perimeter: [], apMarks: [], snapshot: null });
-  activeLevel = id;
+  set.activeLevel(id);
   applyLevelMap(curLevel());
   editingLevel = true; // drop straight into inline rename
   renderLevelTabs();
@@ -2705,9 +2754,9 @@ function deleteLevel() {
   const L = curLevel();
   if (!confirm(`Delete level “${L.name}” and its readings?`)) return;
   const gone = activeLevel;
-  points = points.filter((p) => p.level !== gone);
-  levels = levels.filter((l) => l.id !== gone);
-  activeLevel = levels[0].id;
+  set.points(points.filter((p) => p.level !== gone));
+  set.levels(levels.filter((l) => l.id !== gone));
+  set.activeLevel(levels[0].id);
   applyLevelMap(curLevel());
   renderLevelTabs();
   savePoints();
@@ -2737,21 +2786,21 @@ function renderLevelTabs() {
 const clampv = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function startSchematic() {
-  planMode = "schematic";
-  floorPlanImg = null;
-  floorPlanUrl = null;
+  set.planMode("schematic");
+  set.floorPlanImg(null);
+  set.floorPlanUrl(null);
   if (curLevel()) { curLevel().planMode = "schematic"; curLevel().floorPlanUrl = null; saveLevels(); }
   $("planEmpty").classList.add("hidden");
   $("planArea").classList.remove("hidden");
   $("schematicBar").classList.remove("hidden");
   $("mapWrap").classList.add("schematic");
   if (!rooms.length) {
-    rooms = [
+    set.rooms([
       { id: 1, name: "Living room", x: 0.06, y: 0.08, w: 0.42, h: 0.4 },
       { id: 2, name: "Kitchen", x: 0.52, y: 0.08, w: 0.42, h: 0.4 },
       { id: 3, name: "Bedroom", x: 0.06, y: 0.52, w: 0.42, h: 0.4 },
       { id: 4, name: "Bath", x: 0.52, y: 0.52, w: 0.42, h: 0.4 },
-    ];
+    ]);
     saveRooms();
   }
   setMapMode("edit");
@@ -2804,12 +2853,12 @@ function generateAutoLayout() {
   const totalW = maxX, totalH = y + rowH;
   const m = 0.05, scale = (1 - 2 * m) / Math.max(totalW, totalH, 1);
   let id = 1;
-  rooms = specs.map((s) => ({
+  set.rooms(specs.map((s) => ({
     id: id++, name: s.name,
     x: +(m + s.px * scale).toFixed(3), y: +(m + s.py * scale).toFixed(3),
     w: +(s.w * scale).toFixed(3), h: +(s.h * scale).toFixed(3),
-  }));
-  planMode = "schematic";
+  })));
+  set.planMode("schematic");
   if (curLevel()) { curLevel().planMode = "schematic"; curLevel().floorPlanUrl = null; }
   saveRooms();
   $("planEmpty").classList.add("hidden");
@@ -2825,16 +2874,16 @@ function generateAutoLayout() {
 
 function resetPlan() {
   if (!confirm("Change the plan? Keeps your saved readings, but clears the current layout / photo.")) return;
-  planMode = null;
-  floorPlanImg = null;
-  floorPlanUrl = null;
-  geoBounds = null;
-  calibration = null;
-  calTemp = { a: null, b: null };
-  rooms = [];
-  perimeter = [];
-  apMarks = [];
-  lastAerial = null;   // the frame it described is gone; leaving it lets zoomAerial rebuild a base map the tech just cleared
+  set.planMode(null);
+  set.floorPlanImg(null);
+  set.floorPlanUrl(null);
+  set.geoBounds(null);
+  set.calibration(null);
+  set.calTemp({ a: null, b: null });
+  set.rooms([]);
+  set.perimeter([]);
+  set.apMarks([]);
+  set.lastAerial(null);   // the frame it described is gone; leaving it lets zoomAerial rebuild a base map the tech just cleared
   if (curLevel()) { curLevel().planMode = null; curLevel().floorPlanUrl = null; curLevel().geo = null; curLevel().aerial = null; curLevel().cal = null; curLevel().rooms = []; curLevel().perimeter = []; curLevel().apMarks = []; curLevel().snapshot = null; saveLevels(); }
   hideGpsSpotBtn();
   hideAerialBar();
@@ -2891,8 +2940,8 @@ function chooseSurveyType(t) {
 }
 
 function setMapMode(m) {
-  if (m !== "roomshape") shapeVerts = [];
-  mapMode = m;
+  if (m !== "roomshape") set.shapeVerts([]);
+  set.mapMode(m);
   const wrap = $("mapWrap");
   if (wrap) { wrap.classList.toggle("mode-edit", m === "edit"); wrap.classList.toggle("mode-survey", m !== "edit"); }
   if ($("modeEditBtn")) $("modeEditBtn").classList.toggle("on", m === "edit");
@@ -2903,7 +2952,7 @@ function setMapMode(m) {
   if ($("calBar")) $("calBar").classList.toggle("hidden", m !== "cal");
   if ($("predictBar")) $("predictBar").classList.toggle("hidden", m !== "predict");
   if (m === "cal") setCalStep("Tap one end of a known distance on the plan (e.g. a wall you can measure).");
-  if (m !== "predict" && showPredict) { showPredict = false; updatePredictUI(); }
+  if (m !== "predict" && showPredict) { set.showPredict(false); updatePredictUI(); }
   if ($("mapHint")) {
     $("mapHint").innerHTML = m === "edit"
       ? "<b>Arrange the rooms</b>: drag to move, grab any handle to resize, ◆ to morph a box into a custom shape (then drag corners, tap ＋ to add angles, double-click a corner to remove it), ✎ rename, ✕ delete. Then <b>Take readings</b>."
@@ -2943,7 +2992,7 @@ function undoAP() {
   renderCoverageMap();
 }
 function clearAPs() {
-  apMarks = [];
+  set.apMarks([]);
   if (curLevel()) { curLevel().apMarks = []; saveLevels(); }
   renderCoverageMap();
 }
@@ -2953,7 +3002,7 @@ function toggleCalibrate() {
   if (mapMode === "cal") return cancelCalibration();
   if (geoBounds) return toast("This aerial already has real GPS scale. No calibration needed");
   if (planMode !== "image") return toast("Set scale works on an uploaded floor-plan image");
-  calTemp = { a: null, b: null };
+  set.calTemp({ a: null, b: null });
   setMapMode("cal");
 }
 function setCalStep(step) {
@@ -2976,15 +3025,15 @@ function applyCalibration() {
   // the one on screen — which is why the report could only ever print one floor's figures.
   const imgAspect = floorPlanImg && floorPlanImg.naturalWidth
     ? floorPlanImg.naturalHeight / floorPlanImg.naturalWidth : null;
-  calibration = { a: calTemp.a, b: calTemp.b, feet, imgAspect };
+  set.calibration({ a: calTemp.a, b: calTemp.b, feet, imgAspect });
   if (curLevel()) { curLevel().cal = calibration; saveLevels(); }
-  calTemp = { a: null, b: null };
+  set.calTemp({ a: null, b: null });
   if ($("calFeet")) $("calFeet").value = "";
   setMapMode("survey");
   toast("Scale set. Square footage now available");
 }
 function cancelCalibration() {
-  calTemp = { a: null, b: null };
+  set.calTemp({ a: null, b: null });
   if ($("calFeet")) $("calFeet").value = "";
   setMapMode("survey");
 }
@@ -3009,16 +3058,16 @@ function updateScaleUI() {
 
 /* ---------- predictive design mode ---------- */
 function togglePredict() {
-  if (showPredict) { showPredict = false; setMapMode("survey"); updatePredictUI(); renderCoverageMap(); return; }
+  if (showPredict) { set.showPredict(false); setMapMode("survey"); updatePredictUI(); renderCoverageMap(); return; }
   if (!getScale()) return toast("Set the scale first (📏) so predictions come out in real feet");
-  showPredict = true;
+  set.showPredict(true);
   setMapMode("predict");
   updatePredictUI();
   renderCoverageMap();
 }
-function setPredictEnv(v) { plExponent = PL_ENV[v] || 2.8; updatePredictUI(); renderCoverageMap(); }
+function setPredictEnv(v) { set.plExponent(PL_ENV[v] || 2.8); updatePredictUI(); renderCoverageMap(); }
 function undoPredictAP() { predictAPs.pop(); persistPredict(); updatePredictUI(); renderCoverageMap(); }
-function clearPredictAPs() { predictAPs = []; persistPredict(); updatePredictUI(); renderCoverageMap(); }
+function clearPredictAPs() { set.predictAPs([]); persistPredict(); updatePredictUI(); renderCoverageMap(); }
 function persistPredict() { if (curLevel()) { curLevel().predictAPs = predictAPs; saveLevels(); } }
 function updatePredictUI() {
   const btn = $("btnPredict");
@@ -3046,7 +3095,7 @@ function undoPerimeter() {
   renderCoverageMap();
 }
 function clearPerimeter() {
-  perimeter = [];
+  set.perimeter([]);
   if (curLevel()) { curLevel().perimeter = []; saveLevels(); }
   updatePerimBtn();
   renderCoverageMap();
@@ -3085,7 +3134,7 @@ function renameRoom(id) {
 }
 
 function deleteRoom(id) {
-  rooms = rooms.filter((r) => r.id !== id);
+  set.rooms(rooms.filter((r) => r.id !== id));
   saveRooms();
   renderRooms();
 }
@@ -3135,7 +3184,7 @@ function deletePolyVertex(id, i) {
 /* ---------- polygon "shape" rooms (non-rectangular) ---------- */
 function toggleShapeRoom() {
   if (mapMode === "roomshape") return finishShapeRoom();
-  shapeVerts = [];
+  set.shapeVerts([]);
   setMapMode("roomshape");
 }
 function updateShapeBtn() {
@@ -3145,14 +3194,14 @@ function updateShapeBtn() {
   b.classList.toggle("on", mapMode === "roomshape");
 }
 function undoShapeVert() { shapeVerts.pop(); renderRooms(); }
-function cancelShapeRoom() { shapeVerts = []; setMapMode("edit"); }
+function cancelShapeRoom() { set.shapeVerts([]); setMapMode("edit"); }
 function finishShapeRoom() {
   if (shapeVerts.length < 3) { toast("Tap at least 3 corners to make a shape"); return; }
   const id = (rooms.reduce((m, r) => Math.max(m, r.id), 0) || 0) + 1;
   const name = ($("shapeName") && $("shapeName").value.trim()) || "Room " + (rooms.length + 1);
   rooms.push({ id, name, poly: shapeVerts.slice() });
   if ($("shapeName")) $("shapeName").value = "";
-  shapeVerts = [];
+  set.shapeVerts([]);
   saveRooms();
   setMapMode("edit");
   toast("Added " + name);
@@ -3368,7 +3417,7 @@ function generateSchematicDataURL() {
 // independent of the "tag readings" checkbox. The checkbox only decides whether
 // a fix gets stamped onto saved points.
 function toggleGps() {
-  gpsEnabled = $("gpsEnable").checked;
+  set.gpsEnabled($("gpsEnable").checked);
 }
 
 // Paint the big 3-state badge from a /api/gps/latest fix (or null / offline).
@@ -3397,7 +3446,7 @@ async function refreshGps() {
   try {
     const d = await api("/api/gps/latest");
     if (d.ok && d.fix) {
-      lastGpsFix = d.fix;
+      set.lastGpsFix(d.fix);
       const acc = d.fix.acc != null ? "±" + Math.round(d.fix.acc) + " m" : "accuracy unknown";
       const age = Math.round(d.fix.age_sec);
       if (d.fix.age_sec > 20) {
@@ -3409,12 +3458,12 @@ async function refreshGps() {
       renderYouAreHere(); // move the live "you are here" dot as they walk
       return d.fix;
     }
-    lastGpsFix = null;
+    set.lastGpsFix(null);
     setGpsBadge("wait", "Waiting for your phone…", "Set up your phone below, then keep this page open.");
     renderYouAreHere();
     return null;
   } catch (e) {
-    lastGpsFix = null;
+    set.lastGpsFix(null);
     setGpsBadge("wait", "Backend offline", "Is the survey server still running?");
     renderYouAreHere();
     return null;
@@ -3537,17 +3586,17 @@ function emptyBundle() {
 // (those are added once in loadState; re-adding would double-fire saveSite).
 function restoreProfileBundle(b) {
   b = b || emptyBundle();
-  points = Array.isArray(b.points) ? b.points : [];
-  cellPoints = Array.isArray(b.cellPoints) ? b.cellPoints : [];
-  importedScan = Array.isArray(b.importedScan) ? b.importedScan : [];
-  reportPhotos = Array.isArray(b.reportPhotos) ? b.reportPhotos : [];
-  heatmapDataUrl = b.heatmap || null;
-  surveyEnv = (b.surveyEnv && b.surveyEnv.current) ? b.surveyEnv : null;
-  sitePlan = (b.siteplan && b.siteplan.yard) ? b.siteplan : emptySitePlan();
+  set.points(Array.isArray(b.points) ? b.points : []);
+  set.cellPoints(Array.isArray(b.cellPoints) ? b.cellPoints : []);
+  set.importedScan(Array.isArray(b.importedScan) ? b.importedScan : []);
+  set.reportPhotos(Array.isArray(b.reportPhotos) ? b.reportPhotos : []);
+  set.heatmapDataUrl(b.heatmap || null);
+  set.surveyEnv((b.surveyEnv && b.surveyEnv.current) ? b.surveyEnv : null);
+  set.sitePlan((b.siteplan && b.siteplan.yard) ? b.siteplan : emptySitePlan());
   saveSitePlan();
-  levels = (b.levels && b.levels.length) ? b.levels
-    : [{ id: "L1", name: "Main floor", planMode: null, floorPlanUrl: null, rooms: [], perimeter: [], apMarks: [], sqft: "", snapshot: null }];
-  activeLevel = b.activeLevel || levels[0].id;
+  set.levels((b.levels && b.levels.length) ? b.levels
+    : [{ id: "L1", name: "Main floor", planMode: null, floorPlanUrl: null, rooms: [], perimeter: [], apMarks: [], sqft: "", snapshot: null }]);
+  set.activeLevel(b.activeLevel || levels[0].id);
 
   // persist into the working keys via the existing save fns (each is quota-guarded)
   savePoints();
@@ -3579,7 +3628,7 @@ function switchProfile(id) {
   if (id === activeProfile) { toggleProfileMenu(true); return; }
   if (!profiles.some((p) => p.id === id)) return;
   snapshotActiveProfile();
-  activeProfile = id;
+  set.activeProfile(id);
   restoreProfileBundle(readBundle(id));
   saveProfilesRegistry();
   renderProfileMenu();
@@ -3593,7 +3642,7 @@ function newProfile() {
   const id = "P" + Date.now() + "-" + Math.floor(Math.random() * 1e4);
   const name = "Survey " + (profiles.length + 1);
   profiles.push({ id, name, updated: Date.now() });
-  activeProfile = id;
+  set.activeProfile(id);
   restoreProfileBundle(emptyBundle());      // reset the app to a clean survey
   try { localStorage.setItem(PROFILE_PREFIX + id, JSON.stringify(emptyBundle())); }
   catch (e) { toast("Storage full. Couldn't reserve the new survey slot"); }
@@ -3625,13 +3674,13 @@ function deleteProfile(id) {
   profiles = profiles.filter((p) => p.id !== id);
   if (id === activeProfile) {
     if (profiles.length) {
-      activeProfile = profiles[0].id;
+      set.activeProfile(profiles[0].id);
       restoreProfileBundle(readBundle(activeProfile));
     } else {
       // nothing left — mint a fresh clean one
       const nid = "P" + Date.now() + "-" + Math.floor(Math.random() * 1e4);
       profiles.push({ id: nid, name: "Survey 1", updated: Date.now() });
-      activeProfile = nid;
+      set.activeProfile(nid);
       restoreProfileBundle(emptyBundle());
       try { localStorage.setItem(PROFILE_PREFIX + nid, JSON.stringify(emptyBundle())); } catch (e) {}
     }
@@ -3645,16 +3694,16 @@ function deleteProfile(id) {
 // this profile's data). Never loses pre-existing user data.
 function loadProfiles() {
   try { profiles = JSON.parse(localStorage.getItem(LS_PROFILES)) || []; } catch (e) { profiles = []; }
-  try { activeProfile = localStorage.getItem(LS_ACTIVEPROFILE) || null; } catch (e) { activeProfile = null; }
+  try { set.activeProfile(localStorage.getItem(LS_ACTIVEPROFILE) || null); } catch (e) { set.activeProfile(null); }
   if (!profiles.length) {
     let name = "Survey 1";
     try { const s = JSON.parse(localStorage.getItem(LS_SITE)) || {}; if (s.f_client && s.f_client.trim()) name = s.f_client.trim(); } catch (e) {}
     const id = "P" + Date.now() + "-" + Math.floor(Math.random() * 1e4);
     profiles = [{ id, name, updated: Date.now() }];
-    activeProfile = id;
+    set.activeProfile(id);
     saveProfilesRegistry();
   } else if (!activeProfile || !profiles.some((p) => p.id === activeProfile)) {
-    activeProfile = profiles[0].id;
+    set.activeProfile(profiles[0].id);
     saveProfilesRegistry();
   }
 }
@@ -3704,7 +3753,7 @@ function saveSite() {
   return store(LS_SITE, JSON.stringify(s));
 }
 function loadState() {
-  try { points = JSON.parse(localStorage.getItem(LS_POINTS)) || []; } catch (e) { points = []; }
+  try { set.points(JSON.parse(localStorage.getItem(LS_POINTS)) || []); } catch (e) { set.points([]); }
   try {
     const s = JSON.parse(localStorage.getItem(LS_SITE)) || {};
     SITE_FIELDS.forEach((f) => { if (s[f] && $(f)) $(f).value = s[f]; });
@@ -3714,14 +3763,14 @@ function loadState() {
     if (cc.ip) $("cellIp").value = cc.ip;
     if (cc.pass) $("cellPass").value = cc.pass;
   } catch (e) {}
-  try { cellPoints = JSON.parse(localStorage.getItem(LS_CELLPTS)) || []; } catch (e) { cellPoints = []; }
-  try { heatmapDataUrl = localStorage.getItem(LS_HEATMAP) || null; } catch (e) {}
-  try { reportPhotos = JSON.parse(localStorage.getItem(LS_PHOTOS)) || []; } catch (e) { reportPhotos = []; }
-  try { importedScan = JSON.parse(localStorage.getItem(LS_IMPORTEDSCAN)) || []; } catch (e) { importedScan = []; }
-  try { const sp = JSON.parse(localStorage.getItem(LS_SITEPLAN)); sitePlan = sp && sp.yard ? sp : emptySitePlan(); } catch (e) { sitePlan = emptySitePlan(); }
-  try { const se = JSON.parse(localStorage.getItem(LS_SURVEYENV)); surveyEnv = se && se.current ? se : null; } catch (e) { surveyEnv = null; }
-  try { levels = JSON.parse(localStorage.getItem(LS_LEVELS)) || []; } catch (e) { levels = []; }
-  try { activeLevel = localStorage.getItem(LS_ACTIVELEVEL) || null; } catch (e) {}
+  try { set.cellPoints(JSON.parse(localStorage.getItem(LS_CELLPTS)) || []); } catch (e) { set.cellPoints([]); }
+  try { set.heatmapDataUrl(localStorage.getItem(LS_HEATMAP) || null); } catch (e) {}
+  try { set.reportPhotos(JSON.parse(localStorage.getItem(LS_PHOTOS)) || []); } catch (e) { set.reportPhotos([]); }
+  try { set.importedScan(JSON.parse(localStorage.getItem(LS_IMPORTEDSCAN)) || []); } catch (e) { set.importedScan([]); }
+  try { const sp = JSON.parse(localStorage.getItem(LS_SITEPLAN)); set.sitePlan(sp && sp.yard ? sp : emptySitePlan()); } catch (e) { set.sitePlan(emptySitePlan()); }
+  try { const se = JSON.parse(localStorage.getItem(LS_SURVEYENV)); set.surveyEnv(se && se.current ? se : null); } catch (e) { set.surveyEnv(null); }
+  try { set.levels(JSON.parse(localStorage.getItem(LS_LEVELS)) || []); } catch (e) { set.levels([]); }
+  try { set.activeLevel(localStorage.getItem(LS_ACTIVELEVEL) || null); } catch (e) {}
   initLevels();
   points.forEach((p) => { if (!p.level) p.level = activeLevel; });
   applyLevelMap(curLevel());
@@ -3929,8 +3978,8 @@ function heatOverlayPng(levelPts, geo, W, levelPerimeter) {
   // multi-level export that clipped the upstairs wash to the ground floor's boundary. Swap in the
   // level's own boundary for the duration of the draw, then put it back.
   const saved = perimeter;
-  perimeter = levelPerimeter || [];
-  try { heatClip(ctx, W, H, levelPts); } finally { perimeter = saved; }
+  set.perimeter(levelPerimeter || []);
+  try { heatClip(ctx, W, H, levelPts); } finally { set.perimeter(saved); }
   ctx.drawImage(buildHeatCanvas(levelPts, Math.min(W, 260), Math.min(H, 260), mapAspectOf(geo)), 0, 0, W, H);
   ctx.restore();
   return c.toDataURL("image/png");
@@ -4656,7 +4705,7 @@ function ingestFile(ev) {
       let scan = [];
       try { scan = parsePcap(rb.result); } catch (e) { scan = []; }
       if (scan.length) {
-        importedScan = scan;
+        set.importedScan(scan);
         store(LS_IMPORTEDSCAN, JSON.stringify(scan));
         renderReportInsights();
         if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> network${scan.length > 1 ? "s" : ""} from the packet capture. Channel, signal &amp; security now feed the report's RF analysis.`;
@@ -4675,7 +4724,7 @@ function ingestFile(ev) {
     let scan = parseScanCSV(text);
     if (!scan.length && (name.endsWith(".wifiexplorer") || name.endsWith(".plist") || text.indexOf("<plist") >= 0)) scan = parseWifiExplorerPlist(text);
     if (scan.length) {
-      importedScan = scan;
+      set.importedScan(scan);
       store(LS_IMPORTEDSCAN, JSON.stringify(scan));
       renderReportInsights();
       if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> networks from WiFi&nbsp;Explorer. They now feed the report's interference / RF analysis (channel, width, security, vendor).`;
@@ -5060,7 +5109,7 @@ function onSitePointerMove(ev) {
 }
 function onSitePointerUp() { if (siteDrag) { siteDrag = null; saveSitePlan(); } }
 function setSiteMode(m) {
-  siteMode = m;
+  set.siteMode(m);
   ["yard", "house", "place"].forEach((k) => { const b = $("siteBtn-" + k); if (b) b.classList.toggle("on", k === m); });
   const hint = $("siteHint");
   if (hint) hint.textContent = m === "yard"
