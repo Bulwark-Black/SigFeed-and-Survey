@@ -6,7 +6,7 @@ URL="http://127.0.0.1:8765"
 # Already running? Open it rather than starting a second copy, which just prints a bind error
 # next to a browser window that works — confusing enough to look like a crash.
 if lsof -ti tcp:8765 >/dev/null 2>&1; then
-  echo "Already running — opening the dashboard."
+  echo "Already running. Opening the dashboard."
   open "$URL"
   exit 0
 fi
@@ -30,8 +30,8 @@ fi
     if curl -s -o /dev/null --max-time 1 "$URL"; then open "$URL"; exit 0; fi
     sleep 0.25
   done
-  echo "Server didn't come up — see the messages above."
+  echo "Server didn't come up. See the messages above."
 ) &
 
-echo "WiFi Site Survey — starting…  (close this window or Ctrl+C to stop)"
+echo "WiFi Site Survey, starting…  (close this window or Ctrl+C to stop)"
 exec python3 survey_server.py

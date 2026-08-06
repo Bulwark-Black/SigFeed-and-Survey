@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WiFi Site Survey — Mission Control</title>
+<title>WiFi Site Survey: Mission Control</title>
 <style>
   :root{
     --font-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -31,7 +31,7 @@
     --line:#34455e; --line-soft:rgba(255,255,255,.06); --line-strong:#4a5f7f;
     --highlight:rgba(255,255,255,.055);
     --r-xs:6px; --r-sm:10px; --r-md:14px; --r-lg:18px; --r-xl:24px; --r-pill:999px;
-    /* one number for the sticky header's height — the sidebar pins against it in two places
+    /* one number for the sticky header's height. The sidebar pins against it in two places
        and both offsets were eyeballed separately, so neither matched it */
     --header-h:66px;
     --e-1:0 1px 2px rgba(0,0,0,.35);
@@ -167,7 +167,7 @@
   .storagebar .fill{height:100%;background:var(--exc);border-radius:3px;transition:width var(--dur-2) var(--ease-out)}
   .storagebar.warn{color:var(--fair)} .storagebar.warn .fill{background:var(--fair)}
   .storagebar.full{color:var(--poor)} .storagebar.full .fill{background:var(--poor)}
-  /* readings saved without a map position — visible until they're placed or deleted */
+  /* readings saved without a map position, visible until they're placed or deleted */
   .unplaced{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 16px;padding:12px 15px;
     border-radius:var(--r-md);background:var(--fair-soft);border:1px solid var(--fair-line);
     font-size:13.5px;line-height:1.45;color:var(--ink)}
@@ -266,7 +266,7 @@
   #planImg{width:100%;display:block}
   #heatCanvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   #dotsLayer{position:absolute;inset:0;pointer-events:none}
-  /* live "you are here" GPS marker — blue dot + white ring + soft accuracy halo */
+  /* live "you are here" GPS marker: blue dot + white ring + soft accuracy halo */
   #youHere{position:absolute;left:50%;top:50%;width:20px;height:20px;transform:translate(-50%,-50%);
     border-radius:50%;background:#2563eb;border:3px solid #fff;pointer-events:none;z-index:5;
     display:none;box-shadow:0 0 0 2px rgba(37,99,235,.55),0 2px 6px rgba(0,0,0,.6)}
@@ -468,12 +468,12 @@
   .cellbox .sinr{font-size:38px;font-weight:800;line-height:1.1}
   .cellbox .u{font-size:15px;color:var(--muted)}
   .cellbox .rsrp{font-size:14px;color:var(--muted);margin-top:4px}
-  /* connection badge on the cellular page — reuse the .gpsbadge look via .cellbadge */
+  /* connection badge on the cellular page. Reuse the .gpsbadge look via .cellbadge */
   .cellbadge{margin-bottom:4px}
   .cellbadge .gsub{white-space:normal}
   /* phone-style 5-bar signal graphic */
   .bars{display:flex;align-items:flex-end;justify-content:center;gap:4px;height:34px;margin:2px 0 8px}
-  /* unlit bars need to read as bars, not as absent — at 1.77:1 "2 of 5" looked like "2 of 2" */
+  /* unlit bars need to read as bars, not as absent. At 1.77:1 "2 of 5" looked like "2 of 2" */
   .bars i{width:9px;border-radius:2px;background:#54688a;display:block;transition:background var(--dur-1) var(--ease-out)}
   .bars i:nth-child(1){height:34%}
   .bars i:nth-child(2){height:52%}
@@ -562,7 +562,7 @@
     #floatDbm .fdbm{font-size:26px}
     #floatDbm .fword{margin-top:0}
     #floatDbm .fnet{margin-top:0;margin-left:auto;align-self:center;max-width:40vw}
-    /* the chip spans the full width down here, so whatever sits under it has to clear it —
+    /* the chip spans the full width down here, so whatever sits under it has to clear it:
        otherwise it permanently covers the last ~60px of the page it's shown on.
        It only ever appears on Coverage (updateFloatDbm gates on that), so only Coverage pads. */
     #page-map{padding-bottom:80px}
@@ -599,7 +599,7 @@
     <button class="navitem" id="nav-advanced" onclick="showPage('advanced')"><span class="ni">⚙️</span><span>Advanced</span></button>
     <button class="navitem" id="nav-guide" onclick="showPage('guide')"><span class="ni">❓</span><span>Guide</span></button>
     <div class="side-status" id="sideStatus">
-      <div class="ss-row"><span class="ss-dot" id="ssWifiDot"></span><span id="ssWifi">Wi-Fi —</span></div>
+      <div class="ss-row"><span class="ss-dot" id="ssWifiDot"></span><span id="ssWifi">Wi-Fi · none</span></div>
       <div class="ss-row"><span class="ss-dot" id="ssGpsDot"></span><span id="ssGps">GPS off</span></div>
     </div>
   </nav>
@@ -611,7 +611,7 @@
     <div class="mc-hero-main">
       <div class="mc-hero-eyebrow">🛰 Mission Control</div>
       <h2 id="mcTitle">Your survey at a glance</h2>
-      <p id="mcSummary">Capture a few readings and this hub fills in — signal score, coverage, dead spots, cellular, and your client report, all from one screen.</p>
+      <p id="mcSummary">Capture a few readings and this hub fills in: signal score, coverage, dead spots, cellular, and your client report, all from one screen.</p>
       <div class="mc-hero-actions">
         <button class="btn-primary" onclick="showPage('map')">📍 Take readings</button>
         <button class="btn-ghost2" onclick="showPage('live')">📶 Live signal</button>
@@ -632,7 +632,7 @@
 
   <div class="mc-cols">
     <div class="mc-card"><div class="mc-card-h">Survey progress</div><div id="mcProgress"></div></div>
-    <div class="mc-card"><div class="mc-card-h">Top findings</div><div id="mcFindings"><p class="muted" style="font-size:13px">No findings yet — capture readings to populate.</p></div></div>
+    <div class="mc-card"><div class="mc-card-h">Top findings</div><div id="mcFindings"><p class="muted" style="font-size:13px">No findings yet. Capture readings to populate.</p></div></div>
   </div>
   <div class="mc-card" style="margin-bottom:20px"><div class="mc-card-h">Jump to a tool</div>
     <div class="mc-actions">
@@ -658,7 +658,7 @@
 <div class="page hidden" id="page-siteplan">
   <div class="card">
     <h2 style="margin-top:0">🏡 Site Plan</h2>
-    <p class="muted" style="margin-top:0;margin-bottom:16px">Draw the house, walk the property boundary with your phone GPS, then drop the house where it sits on the lot — a plot plan for the whole property.</p>
+    <p class="muted" style="margin-top:0;margin-bottom:16px">Draw the house, walk the property boundary with your phone GPS, then drop the house where it sits on the lot: a plot plan for the whole property.</p>
     <div class="site-modes">
       <button class="modebtn on" id="siteBtn-yard" onclick="setSiteMode('yard')">▱ Property / yard</button>
       <button class="modebtn" id="siteBtn-house" onclick="setSiteMode('house')">🏠 Draw house</button>
@@ -690,7 +690,7 @@
 
   <!-- GAUGE -->
   <div class="card gauge-wrap">
-    <h2>Signal Strength — walk around and watch this <span class="tt" data-tip="How strong your Wi-Fi is where you're standing. It's a negative number — closer to zero (−45) is stronger than −80.">?</span></h2>
+    <h2>Signal Strength: walk around and watch this <span class="tt" data-tip="How strong your Wi-Fi is where you're standing. It's a negative number. Closer to zero (−45) is stronger than −80.">?</span></h2>
     <svg id="gauge" viewBox="0 0 320 186" xmlns="http://www.w3.org/2000/svg">
       <g id="gaugeZones"></g>
       <line id="needle" x1="160" y1="160" x2="160" y2="68" stroke="#f2f6ff" stroke-width="7" stroke-linecap="round"/>
@@ -703,7 +703,7 @@
 
   <!-- SPEED TEST -->
   <div class="card gauge-wrap">
-    <h2>Speed Test — real internet speed here <span class="tt" data-tip="Runs macOS networkQuality through your connection (~45s). Download is measured first, then upload — the needle follows whichever is running. It settles on the download figure.">?</span></h2>
+    <h2>Speed Test: real internet speed here <span class="tt" data-tip="Runs macOS networkQuality through your connection (~45s). Download is measured first, then upload. The needle follows whichever is running. It settles on the download figure.">?</span></h2>
     <button class="big-btn hero-btn" id="btnSpeedTest" onclick="runSpeedTest()" style="font-size:20px;padding:18px 32px;margin-bottom:8px">⚡ Speed Test</button>
     <svg id="speedGauge" viewBox="0 0 320 205" xmlns="http://www.w3.org/2000/svg">
       <g id="speedZones"></g>
@@ -737,17 +737,17 @@
       <button class="big-btn save-btn" onclick="saveEasy()">✓ SAVE</button>
     </div>
     <div class="hint muted" style="margin-top:10px;font-size:14px">Stand in the middle of the room and wait a second for the dial to settle.
-      <b>Tapping the map below is the one that counts</b> — that records where you were standing, which is what the heatmap,
+      <b>Tapping the map below is the one that counts</b>. That records where you were standing, which is what the heatmap,
       the area figures and the client's map are built from. <b>✓ SAVE</b> logs the reading to the list only.</div>
   </div>
 
   <!-- COVERAGE MAP -->
   <div class="card">
-    <h2>Coverage Map — tap where you are</h2>
+    <h2>Coverage Map: tap where you are</h2>
     <div id="unplacedBar" class="unplaced hidden"></div>
     <div id="levelTabs" class="leveltabs"></div>
     <div style="margin-bottom:16px">
-      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px">Home size — total sq ft (optional, used for room estimates)</label>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:5px">Home size: total sq ft (optional, used for room estimates)</label>
       <input id="f_sqft" type="number" placeholder="e.g. 2400" oninput="saveSite();renderRooms()"
         style="width:220px;background:var(--surface-2);border:1px solid var(--line-strong);color:var(--ink);border-radius:var(--r-sm);padding:12px 13px;font-size:15px;font-family:inherit">
     </div>
@@ -766,7 +766,7 @@
             <span class="tcd">The whole lot. Aerial photo, walk the boundary, export to Google Earth.</span></span></button>
           <button class="typecard" data-type="all" onclick="chooseSurveyType('all')">
             <span class="tcico">🗺️</span><span><span class="tct">All together</span>
-            <span class="tcd">Everything at once — all tools available. Best for mixed jobs.</span></span></button>
+            <span class="tcd">Everything at once, all tools available. Best for mixed jobs.</span></span></button>
         </div>
       </div>
       <div class="toolrow" style="margin-top:14px">
@@ -776,10 +776,10 @@
         <button class="ghost" data-st="aerial" onclick="toggleAerialBox()">🛰 Aerial from address</button>
       </div>
       <div id="aerialBox" class="hidden aerialrow" data-st="aerial">
-        <input id="aerialAddr" type="text" placeholder="street #, street, city, ST ZIP  —  e.g. 1600 Amphitheatre Pkwy, Mountain View, CA 94043" autocomplete="off"
+        <input id="aerialAddr" type="text" placeholder="street #, street, city, ST ZIP, e.g. 1600 Amphitheatre Pkwy, Mountain View, CA 94043" autocomplete="off"
                onkeydown="if(event.key==='Enter')buildAerial()">
         <button class="ghost aerialfind" id="btnAerial" onclick="buildAerial()">🔎 Find</button>
-        <button class="ghost aerialfind" id="btnNaip" onclick="buildNaip()" title="USDA NAIP — public-domain US farm-survey imagery, flown in summer">🌾 NAIP</button>
+        <button class="ghost aerialfind" id="btnNaip" onclick="buildNaip()" title="USDA NAIP: public-domain US farm-survey imagery, flown in summer">🌾 NAIP</button>
         <button class="ghost aerialfind" id="btnEarth" onclick="buildFromEarth()" title="Move Google Earth Pro to this address and use its picture as the base map">🌍 Google Earth</button>
         <select id="earthSpan" title="How much land the picture should cover">
           <option value="91">~300 ft across</option>
@@ -789,16 +789,16 @@
         </select>
       </div>
       <div id="aerialHint" class="hint muted hidden" style="margin-top:8px;font-size:12.5px">
-        <b>Format:</b> street number + street, city, state, ZIP — e.g. <b>1600 Amphitheatre Pkwy, Mountain View, CA 94043</b>. Include the <b>city and state</b> (and ZIP if you have it) so it's found reliably — a bare street name often won't match. A place name works too (e.g. <b>"Lincoln High School, Portland OR"</b>).<br>Tap <b>Find</b> and the satellite image loads as your base map — then walk the property and tap <b>📍 Mark my GPS spot</b> (or tap the map). Use <b>−／＋</b> for a wider or closer view. <span class="muted">Imagery source: Esri, Vantor, Earthstar Geographics, and the GIS User Community.</span>
+        <b>Format:</b> street number + street, city, state, ZIP: e.g. <b>1600 Amphitheatre Pkwy, Mountain View, CA 94043</b>. Include the <b>city and state</b> (and ZIP if you have it) so it's found reliably. A bare street name often won't match. A place name works too (e.g. <b>"Lincoln High School, Portland OR"</b>).<br>Tap <b>Find</b> and the satellite image loads as your base map. Then walk the property and tap <b>📍 Mark my GPS spot</b> (or tap the map). Use <b>−／＋</b> for a wider or closer view. <span class="muted">Imagery source: Esri, Vantor, Earthstar Geographics, and the GIS User Community.</span>
       </div>
       <input type="file" id="planFile" accept="image/*" style="display:none" onchange="loadFloorPlan(event)">
       <div id="autoLayoutBox" class="hidden" data-st="autolayout" style="margin-top:14px">
-        <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:6px">List your rooms — one per line. Add sizes in feet (e.g. <b>Kitchen 12x14</b>) or square feet (<b>Office 120</b>) if you know them:</label>
+        <label style="font-size:13px;color:var(--muted);display:block;margin-bottom:6px">List your rooms, one per line. Add sizes in feet (e.g. <b>Kitchen 12x14</b>) or square feet (<b>Office 120</b>) if you know them:</label>
         <textarea id="autoRooms" rows="5" placeholder="Kitchen 12x14&#10;Living room 15x20&#10;Master bedroom&#10;Office 10x10&#10;Bathroom" style="width:100%;background:var(--surface-2);border:1px solid var(--line-strong);color:var(--ink);border-radius:var(--r-sm);padding:11px 13px;font-size:14px;font-family:inherit;resize:vertical"></textarea>
         <button class="ghost" onclick="generateAutoLayout()" style="margin-top:10px">✨ Generate layout</button>
-        <div class="hint muted" style="font-size:12.5px;margin-top:8px">Creates a rough auto-arranged draft — you then drag rooms to match your real space (auto-layout can't know which room sits next to which).</div>
+        <div class="hint muted" style="font-size:12.5px;margin-top:8px">Creates a rough auto-arranged draft. You then drag rooms to match your real space (auto-layout can't know which room sits next to which).</div>
       </div>
-      <div class="hint muted" style="margin-top:10px;font-size:14px"><b>Draw a schematic</b> to build the layout room-by-room right here (no floor plan needed), or <b>upload</b> a photo/sketch. Then take readings and the heatmap fills in — 🟢 strong · 🟡 weak · 🔴 dead.<br><b>Surveying land?</b> Upload a satellite image of the property (Google Earth) and tap readings across it — works for acreage too.</div>
+      <div class="hint muted" style="margin-top:10px;font-size:14px"><b>Draw a schematic</b> to build the layout room-by-room right here (no floor plan needed), or <b>upload</b> a photo/sketch. Then take readings and the heatmap fills in: 🟢 strong · 🟡 weak · 🔴 dead.<br><b>Surveying land?</b> Upload a satellite image of the property (Google Earth) and tap readings across it. Works for acreage too.</div>
     </div>
     <div id="planArea" class="hidden">
       <div id="typePill"></div>
@@ -826,7 +826,7 @@
           <option value="gradient">Gradient</option>
           <option value="passfail">Pass / Fail</option>
         </select></label>
-        <select id="heatCmapSel" class="heatsel" onchange="setHeatColormap(this.value)" aria-label="Heatmap colour scheme" title="Colour scheme for the gradient heatmap. Red → Green is hard to read for red-green colour blindness — Viridis stays readable for everyone.">
+        <select id="heatCmapSel" class="heatsel" onchange="setHeatColormap(this.value)" aria-label="Heatmap colour scheme" title="Colour scheme for the gradient heatmap. Red → Green is hard to read for red-green colour blindness. Viridis stays readable for everyone.">
           <option value="signal">Red → Green</option>
           <option value="turbo">Turbo</option>
           <option value="viridis">Viridis (colour-blind safe)</option>
@@ -887,7 +887,7 @@
         <button class="ghost gpsspot" onclick="cornerAtGps()">＋ Corner at my GPS</button>
         <button class="ghost" onclick="undoPerimeter()">↩︎ Undo last corner</button>
         <button class="ghost danger" onclick="clearPerimeter()">✕ Clear perimeter</button>
-        <span class="hint muted" style="font-size:12.5px;align-self:center">Stand on each lot corner and tap — or tap the map to place by eye.</span>
+        <span class="hint muted" style="font-size:12.5px;align-self:center">Stand on each lot corner and tap, or tap the map to place by eye.</span>
       </div>
       <div id="apBar" class="subrow hidden" style="justify-content:flex-start;align-items:center">
         <button class="ghost" onclick="toggleAP()">✓ Done</button>
@@ -928,7 +928,7 @@
   <div class="page hidden" id="page-gps">
   <!-- PHONE GPS -->
   <div class="card">
-    <h2>📍 Phone GPS <span class="muted">— optional, for outdoor coordinates</span></h2>
+    <h2>📍 Phone GPS <span class="muted">(optional, for outdoor coordinates)</span></h2>
 
     <!-- live connection badge — updates every 3s whenever this page is open -->
     <div id="gpsBadge" class="gpsbadge wait">
@@ -946,20 +946,20 @@
     <div style="margin-top:16px">
       <div class="hint muted" style="font-size:13.5px">On your phone (same Wi-Fi), install a free GPS-broadcast app and point it at this Mac:</div>
 
-      <div class="hint muted" style="font-size:12.5px;margin-top:12px"><b>iPhone — OwnTracks</b> (free): open the app, tap ⓘ → Settings → set <b>Mode = HTTP</b>, paste this into the <b>URL</b> field, then let it run:</div>
+      <div class="hint muted" style="font-size:12.5px;margin-top:12px"><b>iPhone. OwnTracks</b> (free): open the app, tap ⓘ → Settings → set <b>Mode = HTTP</b>, paste this into the <b>URL</b> field, then let it run:</div>
       <div class="gpsurl"><span class="u" id="gpsUrlBase">…</span><button class="copybtn" onclick="copyGpsUrl('gpsUrlBase')">Copy</button></div>
 
-      <div class="hint muted" style="font-size:12.5px;margin-top:12px"><b>Android — GPSLogger</b> (free): Logging details → <b>Log to custom URL</b>, paste this whole URL, set the interval to ~2 s, then <b>Start logging</b>:</div>
+      <div class="hint muted" style="font-size:12.5px;margin-top:12px"><b>Android, GPSLogger</b> (free): Logging details → <b>Log to custom URL</b>, paste this whole URL, set the interval to ~2 s, then <b>Start logging</b>:</div>
       <div class="gpsurl"><span class="u" id="gpsUrl">…</span><button class="copybtn" onclick="copyGpsUrl('gpsUrl')">Copy</button></div>
 
-      <div class="hint muted" style="font-size:12.5px;margin-top:12px">Carry the phone with you — the Mac reads Wi-Fi and stamps the phone's GPS onto each reading. (macOS may ask to <b>Allow</b> incoming connections the first time — click Allow.)</div>
+      <div class="hint muted" style="font-size:12.5px;margin-top:12px">Carry the phone with you. The Mac reads Wi-Fi and stamps the phone's GPS onto each reading. (macOS may ask to <b>Allow</b> incoming connections the first time. Click Allow.)</div>
     </div>
   </div>
 
   </div><!-- /page-gps -->
   <div class="page hidden" id="page-report">
   <div class="card">
-    <h2>Client &amp; Site <span class="muted">— appears on the report</span></h2>
+    <h2>Client &amp; Site<span class="muted">: appears on the report</span></h2>
     <div class="rform">
       <div><label>Client / Owner name</label><input id="f_client" placeholder="e.g. Jan Christensen"></div>
       <div><label>Property address</label><input id="f_address" placeholder="123 Main St"></div>
@@ -967,11 +967,11 @@
     </div>
   </div>
   <div class="card">
-    <h2>Findings <span class="muted">— automated analysis of your readings</span></h2>
+    <h2>Findings<span class="muted">: automated analysis of your readings</span></h2>
     <div id="reportInsights"><p class="muted">Save some readings and the Wi-Fi signal score + findings will appear here, then flow into your PDF.</p></div>
   </div>
   <div class="card">
-    <h2>📥 Ingest tool data <span class="muted">— pull in scans, surveys, heatmaps</span></h2>
+    <h2>📥 Ingest tool data<span class="muted">: pull in scans, surveys, heatmaps</span></h2>
     <button class="ghost" onclick="document.getElementById('ingestFile').click()">Choose a file…</button>
     <input type="file" id="ingestFile" accept=".json,.csv,.txt,.pcap,.pcapng,.cap,image/*" style="display:none" onchange="ingestFile(event)">
     <div id="ingestStatus" class="muted" style="margin-top:10px;font-size:14px">Accepts a survey <b>.json</b>, a Wi-Fi scan <b>.csv</b> (WiFi Explorer / NetSpot / inSSIDer), a monitor-mode packet capture <b>.pcap / .pcapng</b>, or a heatmap <b>image</b>. Scans &amp; captures feed the report's interference analysis.</div>
@@ -982,12 +982,12 @@
   <!-- SAVED SPOTS -->
   <div class="card">
     <h2>Rooms checked (<span id="easyCount">0</span>)</h2>
-    <div id="easySpots"><div class="spot-empty">No rooms yet — walk to a room and tap <b>SAVE</b>.</div></div>
+    <div id="easySpots"><div class="spot-empty">No rooms yet. Walk to a room and tap <b>SAVE</b>.</div></div>
   </div>
 
   <!-- SITE PHOTOS -->
   <div class="card">
-    <h2>📸 Site Photos &amp; Screenshots <span class="muted">— appear in the PDF report</span></h2>
+    <h2>📸 Site Photos &amp; Screenshots <span class="muted">(appear in the PDF report)</span></h2>
     <button class="ghost" onclick="document.getElementById('reportPhotoFile').click()">＋ Add photos / screenshots</button>
     <input type="file" id="reportPhotoFile" accept="image/*" multiple style="display:none" onchange="addReportPhotos(event)">
     <div class="hint muted" style="font-size:12.5px;margin-top:8px">Add wiring-closet shots, router placement, speed-test screenshots, damage, etc. Each is shrunk to ~1400px so the report stays light. Give each a caption below.</div>
@@ -1005,13 +1005,13 @@
     <div class="rowcap">Save &amp; export</div>
     <div class="subrow">
       <button class="ghost" onclick="exportJSON()" title="Full survey, reload it later or share with another surveyor">⬇︎ Save survey (.json)</button>
-      <button class="ghost" onclick="exportCSV()" title="Spreadsheet of every reading — opens in Excel / Numbers / Sheets">📊 Export data (.csv)</button>
+      <button class="ghost" onclick="exportCSV()" title="Spreadsheet of every reading, opens in Excel / Numbers / Sheets">📊 Export data (.csv)</button>
       <button class="ghost" onclick="exportKML()" title="Coverage heatmap, readings, boundary and routers for Google Earth Pro">🌍 Google Earth (.kmz)</button>
       <button class="ghost" id="btnLive" onclick="toggleLiveEarth()" title="Open Google Earth Pro and keep it updated as you walk the property">🛰 Live in Google Earth</button>
       <button class="ghost" onclick="window.open('/run-sheet.html','_blank')" title="Printable on-site field checklist">🖨 Field run sheet</button>
       <div id="liveHint" class="hint muted hidden" style="flex-basis:100%;font-size:12.5px;margin-top:6px">
         <b>Colour looking patchy under trees?</b> Google Earth draws its 3D trees on top of it. In Google Earth's <b>Layers</b> panel (bottom left), untick <b>3D Buildings</b> and the colour fills in.<br>
-        <b>Seeing everything twice?</b> Google Earth is holding a survey from an earlier session. In <b>Temporary Places</b>, delete the older <b>WiFi Survey — live coverage</b> entries.
+        <b>Seeing everything twice?</b> Google Earth is holding a survey from an earlier session. In <b>Temporary Places</b>, delete the older <b>WiFi Survey live coverage</b> entries.
       </div>
     </div>
     <div id="storageBar" class="storagebar"></div>
@@ -1027,7 +1027,7 @@
   <div class="page hidden" id="page-cellular">
   <!-- CELLULAR / ANTENNA AIMING -->
   <div class="card">
-    <h2>📡 Cellular signal — for aiming the antenna <span class="tt" data-tip="SINR = how clean the cell signal is (higher = faster, steadier). RSRP = how strong it is (closer to zero = stronger).">?</span></h2>
+    <h2>📡 Cellular signal: for aiming the antenna <span class="tt" data-tip="SINR = how clean the cell signal is (higher = faster, steadier). RSRP = how strong it is (closer to zero = stronger).">?</span></h2>
     <div class="field">
       <div><label>Gateway address</label><input id="cellIp" value="192.168.12.1" style="width:150px"></div>
       <div><label>Admin password</label><input id="cellPass" type="password" placeholder="on gateway label" style="width:170px"></div>
@@ -1038,7 +1038,7 @@
     </div>
     <div id="cellStatus" class="gpsbadge cellbadge wait" style="margin-top:10px">
       <span class="gicon" id="cellBadgeIcon">📡</span>
-      <span><span id="cellBadgeText">Not connected — enter the gateway password &amp; tap Connect.</span><span class="gsub" id="cellBadgeSub">You must be on the gateway's Wi-Fi.</span></span>
+      <span><span id="cellBadgeText">Not connected. Enter the gateway password &amp; tap Connect.</span><span class="gsub" id="cellBadgeSub">You must be on the gateway's Wi-Fi.</span></span>
     </div>
     <div id="cellResults" class="hidden">
       <div class="cellgrid">
@@ -1061,10 +1061,10 @@
             <div class="m"><div class="mk">Band</div><div class="mv" id="lteBand">—</div></div>
           </div></div>
       </div>
-      <div class="aim-hint">🎯 <b>Higher SINR is better.</b> <b>Antenna not mounted yet?</b> Carry the gateway to each candidate spot, wait ~15s for the numbers to settle, then <b>LOG</b> it — compare spots to pick the best mount location. <b>Aiming a mounted antenna?</b> Rotate slowly and watch these climb.</div>
+      <div class="aim-hint">🎯 <b>Higher SINR is better.</b> <b>Antenna not mounted yet?</b> Carry the gateway to each candidate spot, wait ~15s for the numbers to settle, then <b>LOG</b> it. Compare spots to pick the best mount location. <b>Aiming a mounted antenna?</b> Rotate slowly and watch these climb.</div>
       <div style="border-top:1px solid var(--line);margin:18px 0"></div>
       <div style="font-weight:700;font-size:16px;margin-bottom:4px">Connection speed</div>
-      <div class="hint muted" style="font-size:12.5px;margin-bottom:10px">Measures the <b>real internet speed</b> you're getting through the gateway right now — i.e. your cellular data speed, which reflects the cell signal above.</div>
+      <div class="hint muted" style="font-size:12.5px;margin-bottom:10px">Measures the <b>real internet speed</b> you're getting through the gateway right now, i.e. your cellular data speed, which reflects the cell signal above.</div>
       <button class="ghost" id="btnCellSpeed" onclick="runCellSpeed()">⚡ Test connection speed</button>
       <div class="speedbox" id="cellSpeedBox">
         <div class="sp"><div class="spk">Download</div><div class="spv" id="csDown">—</div></div>
@@ -1074,7 +1074,7 @@
       <div style="border-top:1px solid var(--line);margin:18px 0"></div>
       <div style="font-weight:700;font-size:16px;margin-bottom:10px">Candidate mount spots (<span id="cellCount">0</span>)</div>
       <div class="roombar">
-        <input id="cellSpotLabel" placeholder="Spot name — attic, SE wall, upstairs window…" autocomplete="off" onkeydown="if(event.key==='Enter')logCellSpot()">
+        <input id="cellSpotLabel" placeholder="Spot name: attic, SE wall, upstairs window…" autocomplete="off" onkeydown="if(event.key==='Enter')logCellSpot()">
         <button class="big-btn save-btn" onclick="logCellSpot()">＋ LOG</button>
       </div>
       <div id="cellSpots" style="margin-top:12px"><div class="spot-empty">Move the gateway to a spot, let it settle, then LOG it.</div></div>
@@ -1153,13 +1153,13 @@
   </div><!-- /page-advanced -->
   <div class="page hidden" id="page-guide">
     <div class="card"><h2>What each page does</h2>
-      <p class="muted" style="margin-top:0">The pages in the left nav — each one answers a different question.</p>
+      <p class="muted" style="margin-top:0">The pages in the left nav: each one answers a different question.</p>
       <div id="guidePages"></div></div>
     <div class="card"><h2>Which tool should I use?</h2>
       <p class="muted" style="margin-top:0">Each tool answers one question well. Pick by the question you're trying to answer.</p>
       <div id="guideTools"></div></div>
     <div class="card"><h2>Recommended survey workflow</h2><div id="guideFlow"></div></div>
-    <div class="card"><h2>Glossary — what the terms mean</h2><div id="glossary" class="glossary"></div></div>
+    <div class="card"><h2>Glossary: what the terms mean</h2><div id="glossary" class="glossary"></div></div>
     <div class="card"><p class="muted" style="margin:0">Want the deep reference? The full written walkthrough is <b>USER_GUIDE.md</b> in the app folder (the folder this app was started from).</p></div>
   </div>
   </main><!-- /content -->

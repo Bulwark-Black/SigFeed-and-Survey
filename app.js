@@ -68,8 +68,8 @@ let siteDrag = null;                  // in-progress house drag
 // a GPS-walked yard boundary is an hour on foot — a failed write here has to be visible
 function saveSitePlan() { return store(LS_SITEPLAN, JSON.stringify(sitePlan)); }
 let surveyType = "all";  // 'inhouse'|'around'|'property'|'all' — WHAT is being surveyed (mirrors curLevel().surveyType; default 'all' = show everything = back-compat)
-let profiles = [];        // [{id,name,updated}] registry — mirrors LS_PROFILES
-let activeProfile = null; // id of the currently-loaded profile — its live data is in the working keys
+let profiles = [];        // [{id,name,updated}] registry: mirrors LS_PROFILES
+let activeProfile = null; // id of the currently-loaded profile. Its live data is in the working keys
 
 /* ---------- ratings ---------- */
 function rate(signal, snr) {
@@ -242,7 +242,7 @@ async function runSpeedTest() {
   } catch (e) {
     resetSpeedUI("—");
     finish();
-    return toast("Couldn't start the speed test — is the server running?");
+    return toast("Couldn't start the speed test. Is the server running?");
   }
 
   speedPolling = true;
@@ -265,7 +265,7 @@ async function runSpeedTest() {
           : '<span class="spin"></span>&nbsp; Upload…';
         // the caption has to follow the needle — it read "Download speed" while the dial was
         // showing the upload figure, which is worse than not labelling it at all
-        if ($("speedSub")) $("speedSub").textContent = s.phase === "download" ? "Download — measuring…" : "Upload — measuring…";
+        if ($("speedSub")) $("speedSub").textContent = s.phase === "download" ? "Download: measuring…" : "Upload: measuring…";
       }
       // fill each direction in as its half completes, so the numbers appear as they're measured
       if (s.down > 0) $("stDown").textContent = s.down.toFixed(1) + " Mbps";
@@ -325,9 +325,9 @@ function renderStorageBar() {
   const level = pct >= 85 ? "full" : pct >= 65 ? "warn" : "";
   el.className = "storagebar" + (level ? " " + level : "");
   el.innerHTML = `<span>Browser storage</span><span class="track"><span class="fill" style="width:${pct}%"></span></span>` +
-    `<span>${fmtBytes(used)} of ~${fmtBytes(STORAGE_BUDGET)}${pct >= 65 ? " — save the survey file now; photos and floor plans are what fill this" : ""}</span>`;
+    `<span>${fmtBytes(used)} of ~${fmtBytes(STORAGE_BUDGET)}${pct >= 65 ? ". Save the survey file now; photos and floor plans are what fill this" : ""}</span>`;
   // one nudge per session, at the point where there's still room to act
-  if (pct >= 85 && !storageWarned) { storageWarned = true; warn("Browser storage is nearly full — save the survey file before adding more photos."); }
+  if (pct >= 85 && !storageWarned) { storageWarned = true; warn("Browser storage is nearly full. Save the survey file before adding more photos."); }
   if (pct < 65) storageWarned = false;
 }
 
@@ -335,7 +335,7 @@ function renderStorageBar() {
 // out in the field a silent quota error looks exactly like "the save button stopped working".
 function store(key, value) {
   try { localStorage.setItem(key, value); return true; }
-  catch (e) { warn("Storage full — that didn't save. Export the survey now to avoid losing it."); return false; }
+  catch (e) { warn("Storage full. That didn't save. Export the survey now to avoid losing it."); return false; }
 }
 
 /* ---------- backend calls ---------- */
@@ -426,12 +426,12 @@ async function poll() {
     } else {
       band.className = "statusband bad";
       band.querySelector(".big-dot").textContent = "⚠️";
-      $("easyStatusText").textContent = "Not connected — join the home's Wi-Fi";
+      $("easyStatusText").textContent = "Not connected. Join the home's Wi-Fi";
     }
     renderAdvLive(d);
     renderNearby(d.nearby, c);
   } catch (e) {
-    $("easyStatusText").textContent = "Backend offline — is the server running?";
+    $("easyStatusText").textContent = "Backend offline. Is the server running?";
     $("gaugeWord").textContent = "—";
   }
 }
@@ -502,7 +502,7 @@ async function launch(app) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ app }),
     });
-    if (!d.ok) toast("Couldn't open " + app + " — is it installed?");
+    if (!d.ok) toast("Couldn't open " + app + ". Is it installed?");
   } catch (e) {
     toast("Launch failed");
   }
@@ -546,7 +546,7 @@ function addPoint(loc, c, extras) {
 function saveEasy() {
   const loc = $("easyRoom").value.trim();
   if (!loc) return toast("Type the room name first");
-  if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
+  if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal. Are you connected?");
   if (!addPoint(loc, lastScan.current, null)) return;   // storage failed — keep the typed name so it can be retried
   $("easyRoom").value = "";
   $("easyRoom").focus();
@@ -556,7 +556,7 @@ function saveEasy() {
 async function captureAdv() {
   const loc = $("capLoc").value.trim();
   if (!loc) return toast("Enter a location label first");
-  if (!lastScan || !lastScan.current) return toast("No live signal — is Wi-Fi connected?");
+  if (!lastScan || !lastScan.current) return toast("No live signal. Is Wi-Fi connected?");
   const extras = {};
   if ($("capThroughput").checked) {
     toast("Measuring throughput…");
@@ -609,7 +609,7 @@ function renderPoints() {
   renderReportInsights();
   const es = $("easySpots");
   if (!points.length) {
-    es.innerHTML = '<div class="spot-empty">No rooms yet — walk to a room and tap <b>SAVE</b>.</div>';
+    es.innerHTML = '<div class="spot-empty">No rooms yet. Walk to a room and tap <b>SAVE</b>.</div>';
   } else {
     es.innerHTML = points
       .map((p) => {
@@ -718,7 +718,7 @@ function renderSummary() {
 }
 function updateSideStatus() {
   const c = lastScan && lastScan.current;
-  if ($("ssWifi")) { $("ssWifi").textContent = c ? "Wi-Fi · " + (c.ssid || "connected") : "Wi-Fi —"; $("ssWifiDot").style.background = c ? "var(--exc)" : "var(--na)"; }
+  if ($("ssWifi")) { $("ssWifi").textContent = c ? "Wi-Fi · " + (c.ssid || "connected") : "Wi-Fi · none"; $("ssWifiDot").style.background = c ? "var(--exc)" : "var(--na)"; }
   const on = lastGpsFix && lastGpsFix.lat != null;
   if ($("ssGps")) { $("ssGps").textContent = on ? "GPS · live" : "GPS off"; $("ssGpsDot").style.background = on ? "var(--exc)" : "var(--na)"; }
 }
@@ -864,7 +864,7 @@ async function connectCell() {
       // screen (marked stale) and give it a few tries before giving up.
       if (cellTimer && cellFails >= 5) {
         stopCellAuto();
-        setCellBadge("stale", "⚠️", "Lost the gateway — auto-refresh stopped.", "Reconnect once it's back on the network.");
+        setCellBadge("stale", "⚠️", "Lost the gateway. Auto-refresh stopped.", "Reconnect once it's back on the network.");
       }
       if (!lastCell) $("cellResults").classList.add("hidden");
     } else {
@@ -875,7 +875,7 @@ async function connectCell() {
       $("cellResults").classList.remove("hidden");
       const band5g = (d.nr && d.nr.bands) ? " · 5G " + d.nr.bands : (d.lte && d.lte.bands ? " · LTE " + d.lte.bands : "");
       const when = d.ts ? d.ts.split("T")[1] : "";
-      setCellBadge("ok", "✅", `Connected — ${d.model || "gateway"}${band5g}`, `Updated ${when} · let readings settle ~15s before comparing spots.`);
+      setCellBadge("ok", "✅", `Connected: ${d.model || "gateway"}${band5g}`, `Updated ${when} · let readings settle ~15s before comparing spots.`);
       store(LS_CELL, JSON.stringify({ ip, pass }));
     }
   } catch (e) {
@@ -1109,8 +1109,8 @@ function attachHeatmap(ev) {
     heatmapDataUrl = r.result;
     renderHeatmapThumb();
     // Still usable this session if it won't fit, but the user has to know it won't survive a reload.
-    try { localStorage.setItem(LS_HEATMAP, heatmapDataUrl); toast("Heatmap attached — it'll appear in the report"); }
-    catch (e) { warn("Heatmap attached, but it's too big to save — make the report before reloading."); }
+    try { localStorage.setItem(LS_HEATMAP, heatmapDataUrl); toast("Heatmap attached. It'll appear in the report"); }
+    catch (e) { warn("Heatmap attached, but it's too big to save. Make the report before reloading."); }
   };
   r.readAsDataURL(file);
   ev.target.value = "";
@@ -1136,7 +1136,7 @@ function renderHeatmapThumb() {
 // It stays non-fatal (they're in memory and will still reach the PDF) but never silent.
 function savePhotos() {
   try { localStorage.setItem(LS_PHOTOS, JSON.stringify(reportPhotos)); return true; }
-  catch (e) { warn("Photos are too big to save — make the report before reloading, or remove a photo."); return false; }
+  catch (e) { warn("Photos are too big to save. Make the report before reloading, or remove a photo."); return false; }
 }
 
 // downscale each picked image to a ~1400px jpeg data URL (same approach as loadFloorPlan) and add it
@@ -1155,7 +1155,7 @@ function addReportPhotos(ev) {
         c.width = W; c.height = H;
         c.getContext("2d").drawImage(img, 0, 0, W, H);
         reportPhotos.push({ url: c.toDataURL("image/jpeg", 0.82), caption: "" });
-        if (--pending === 0) { savePhotos(); renderReportPhotos(); toast(files.length + " photo" + (files.length > 1 ? "s" : "") + " added — they'll appear in the report"); }
+        if (--pending === 0) { savePhotos(); renderReportPhotos(); toast(files.length + " photo" + (files.length > 1 ? "s" : "") + " added. They'll appear in the report"); }
       };
       img.onerror = () => { if (--pending === 0) { savePhotos(); renderReportPhotos(); } };
       img.src = reader.result;
@@ -1521,7 +1521,7 @@ function updateAreaPassing() {
   const area = surveyedSqft(mapped);
   const sq = area ? ` <span class="ppe">≈ ${Math.round((area * s.pct) / 100).toLocaleString()} ft²</span>` : "";
   el.innerHTML = `<span class="ppn">${s.pct}%</span> area passing${sq} · <b>${esc(prof.label)}</b> <span class="ppe">est.</span>`;
-  el.title = `${reqGateText(prof)} — estimated % of the surveyed area (interpolated, clipped to the walked area)`;
+  el.title = `${reqGateText(prof)}: estimated % of the surveyed area (interpolated, clipped to the walked area)`;
 }
 /* ---------- real-world scale (feet) → square footage ----------
    Aerial levels carry true geo scale for free (Web-Mercator geoBounds); uploaded plans get a
@@ -1667,7 +1667,7 @@ function drawPredictPins(ctx, W, H) {
   });
 }
 function drawPredictBadge(ctx, W, H) {
-  const t = "🔮 PREDICTED — modeled, not measured";
+  const t = "🔮 PREDICTED: modeled, not measured";
   ctx.save();
   ctx.font = "bold 12px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
   const w = ctx.measureText(t).width + 18;
@@ -1859,7 +1859,7 @@ function loadFloorPlan(ev) {
       geoBounds = null;
       if (curLevel()) { curLevel().cal = null; curLevel().geo = null; }
       setFloorPlan(url);
-      toast("Floor plan added — tap where you're standing");
+      toast("Floor plan added. Tap where you're standing");
     };
     img.src = reader.result;
   };
@@ -1880,7 +1880,7 @@ function tile2lat(yt, z) {
   return Math.atan(Math.sinh(n)) * 180 / Math.PI;
 }
 
-let lastAerial = null;   // {lat, lon, z} — remembers the last geocoded center so zoom +/- can rebuild
+let lastAerial = null;   // {lat, lon, z}: remembers the last geocoded center so zoom +/- can rebuild
 
 const AERIAL_TILES = 4;   // composed aerial is AERIAL_TILES² tiles (4×4 = 1024px)
 
@@ -1928,7 +1928,7 @@ function adoptAerial(dataUrl, bounds, meta) {
   // spreads into every IDW cell a NaN reading touches. z:null would quietly pass as 2^0=1.
   if (!bounds || !["west", "east", "north", "south", "z"].every((k) => finite(bounds[k]))
       || bounds.west >= bounds.east || bounds.north <= bounds.south) {
-    warn("That base map has no usable position data — not loading it.");
+    warn("That base map has no usable position data. Not loading it.");
     return { ok: false, saved: false };
   }
 
@@ -1953,7 +1953,7 @@ function adoptAerial(dataUrl, bounds, meta) {
 // How far a reading can sit from where it really is, in feet. Driven almost entirely by relief:
 // tall trees and buildings lean outward from the centre of a nadir photo, so the error is real
 // but concentrated around tall things and near the frame edges.
-const EARTH_ACC_EXACT_FT = 5;     // below this the base map isn't the limiting error — GPS is
+const EARTH_ACC_EXACT_FT = 5;     // below this the base map isn't the limiting error. GPS is
 const EARTH_ACC_NOTE_FT  = 25;    // above this, say the number out loud
 const EARTH_ACC_STOP_FT  = 82;    // above this a reading can land on the neighbouring parcel
 
@@ -1986,7 +1986,7 @@ async function captureFromEarth(lat, lon, spanM) {
   try {
     const s = await api(`/api/earth/start?lat=${lat}&lon=${lon}&span=${spanM}`);
     if (!s.ok) { warn(s.error || "Couldn't start the capture."); return false; }
-    toast("Moving Google Earth to the property — about 30 seconds. Don't touch it while it runs.");
+    toast("Moving Google Earth to the property. About 30 seconds. Don't touch it while it runs.");
 
     let r = null;
     for (let i = 0; i < 90; i++) {
@@ -1996,7 +1996,7 @@ async function captureFromEarth(lat, lon, spanM) {
       if (!r.running) break;
     }
     setBusy(null);
-    if (!r || r.running) { warn("Google Earth is taking too long — is it stuck on a dialog?"); return false; }
+    if (!r || r.running) { warn("Google Earth is taking too long. Is it stuck on a dialog?"); return false; }
     if (r.error) { warn(r.error); return false; }
     if (!r.result) { warn("The capture finished with nothing to show."); return false; }
 
@@ -2005,7 +2005,7 @@ async function captureFromEarth(lat, lon, spanM) {
     // Say the number BEFORE adopting when it's large enough to change how the survey is read.
     if (accFt > EARTH_ACC_STOP_FT && !confirm(
       `This view is very hilly or heavily wooded.\n\n` +
-      `Positions on this base map could be off by about ${Math.round(accFt)} ft — far enough that a ` +
+      `Positions on this base map could be off by about ${Math.round(accFt)} ft: far enough that a ` +
       `reading could land on the neighbouring property.\n\nCapture a smaller area instead, or use it anyway?`
     )) return false;
     if (accFt > EARTH_ACC_NOTE_FT && accFt <= EARTH_ACC_STOP_FT && !confirm(
@@ -2021,12 +2021,12 @@ async function captureFromEarth(lat, lon, spanM) {
     });
     if (!got.ok) return false;
     if (!got.saved) {
-      warn("Captured, but browser storage is full — export the survey now.");
+      warn("Captured, but browser storage is full. Export the survey now.");
       return false;
     }
     toast(accFt <= EARTH_ACC_EXACT_FT
-      ? "📷 Base map captured — positions are accurate to under 5 ft."
-      : `📷 Base map captured — positions accurate to about ${Math.round(accFt)} ft.`);
+      ? "📷 Base map captured. Positions are accurate to under 5 ft."
+      : `📷 Base map captured. Positions accurate to about ${Math.round(accFt)} ft.`);
     return true;
   } catch (e) {
     setBusy(null);
@@ -2049,7 +2049,7 @@ async function buildFromEarth() {
       if (d.name && $("aerialAddr")) $("aerialAddr").value = d.name;
       lat = d.lat; lon = d.lon;
     } catch (e) {
-      warn("Geocode failed — is the server running?"); return;
+      warn("Geocode failed. Is the server running?"); return;
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "🌍 Google Earth"; }
     }
@@ -2072,7 +2072,7 @@ async function buildAerial() {
   try {
     const d = await api("/api/geocode?q=" + encodeURIComponent(q));
     if (!d || !d.ok || d.lat == null || d.lon == null) {
-      toast("Couldn't find that address — check spelling and include city, state & ZIP.");
+      toast("Couldn't find that address. Check spelling and include city, state & ZIP.");
       return;
     }
     if (d.name && $("aerialAddr")) $("aerialAddr").value = d.name;   // show the REAL matched address
@@ -2083,12 +2083,12 @@ async function buildAerial() {
     // Only the Census hit (and precise OSM matches) actually pin the house. If we
     // only got an area centroid, load it anyway but tell the tech to pin manually.
     if (d.precise === false) {
-      toast("⚠️ Found only the area (couldn't pin the exact house) — zoom in with ＋ and tap the map to mark your spot.");
+      toast("⚠️ Found only the area (couldn't pin the exact house). Zoom in with ＋ and tap the map to mark your spot.");
     } else {
       toast("📍 Found: " + (d.name || q));
     }
   } catch (e) {
-    toast("Geocode failed — is the server running?");
+    toast("Geocode failed. Is the server running?");
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = oldTxt || "🔎 Find"; }
   }
@@ -2140,12 +2140,12 @@ async function composeAerial(lat, lon, z) {
   // rural Montana has ground at z21 while downtown San Francisco doesn't. A short grid is a
   // base map with blank squares in it, so say so instead of letting it reach a client report.
   if (!got) {
-    warn("No satellite imagery here at this zoom — tap − for a wider view.");
+    warn("No satellite imagery here at this zoom. Tap − for a wider view.");
     return { ok: false, committed: false, gaps: asked };
   }
   const gaps = asked - got;
   if (gaps) {
-    warn(`Only ${got} of ${asked} image tiles exist at this zoom — the gaps are blank. Tap − for a wider view.`);
+    warn(`Only ${got} of ${asked} image tiles exist at this zoom. The gaps are blank. Tap − for a wider view.`);
   }
 
   // geo-bounds of the composed image (exact tile-edge lat/lon of the float window)
@@ -2160,10 +2160,10 @@ async function composeAerial(lat, lon, z) {
   // An aerial is the most expensive thing in a survey to rebuild — an hour of driving if it's
   // lost — so a failed write still has to be loud.
   if (!adopted.saved) {
-    warn("Aerial loaded but couldn't be saved — browser storage is full. Export the survey now.");
+    warn("Aerial loaded but couldn't be saved: browser storage is full. Export the survey now.");
     return { ok: false, committed: adopted.ok, gaps };
   }
-  if (!gaps) toast("Aerial ready — walk the property and tap “📍 Mark my GPS spot”, or tap the map");
+  if (!gaps) toast("Aerial ready. Walk the property and tap “📍 Mark my GPS spot”, or tap the map");
   return { ok: true, committed: adopted.ok, gaps };
 }
 
@@ -2192,7 +2192,7 @@ function planRebase(oldGeo, newGeo) {
       const okMap = saveLevelMap();
       renderCoverageMap();
       if (!okPts || !okMap) {
-        warn("Positions were updated on screen but couldn't be saved — export the survey now, "
+        warn("Positions were updated on screen but couldn't be saved. Export the survey now, "
              + "and don't reload the page first.");
       }
       return okPts && okMap;
@@ -2256,7 +2256,7 @@ async function composeNaip(lat, lon, z) {
     i.src = url;
   });
   if (!img) {
-    warn("No NAIP imagery here — it covers the United States only. Try satellite instead.");
+    warn("No NAIP imagery here. It covers the United States only. Try satellite instead.");
     return { ok: false, committed: false, gaps: 0 };
   }
   const c = document.createElement("canvas");
@@ -2265,10 +2265,10 @@ async function composeNaip(lat, lon, z) {
   const adopted = adoptAerial(c.toDataURL("image/jpeg", 0.85), bounds,
     { source: "naip", lat, lon, z });
   if (!adopted.saved) {
-    warn("NAIP loaded but couldn't be saved — browser storage is full. Export the survey now.");
+    warn("NAIP loaded but couldn't be saved. Browser storage is full. Export the survey now.");
     return { ok: false, committed: adopted.ok, gaps: 0 };
   }
-  toast("NAIP aerial ready — walk the property and tap “📍 Mark my GPS spot”, or tap the map");
+  toast("NAIP aerial ready. Walk the property and tap “📍 Mark my GPS spot”, or tap the map");
   return { ok: true, committed: adopted.ok, gaps: 0 };
 }
 
@@ -2284,7 +2284,7 @@ async function buildNaip() {
     if (d.name && $("aerialAddr")) $("aerialAddr").value = d.name;
     await composeNaip(d.lat, d.lon, 19);
   } catch (e) {
-    warn("Geocode failed — is the server running?");
+    warn("Geocode failed. Is the server running?");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "🌾 NAIP"; }
   }
@@ -2305,9 +2305,9 @@ function showAerialBar() {
   ["btnZoomOut", "btnZoomIn"].forEach((id) => { const x = $(id); if (x) x.classList.toggle("hidden", !zoomable); });
   const s = $("aerialSrc");
   if (s) s.textContent =
-    src === "naip" ? "USDA NAIP (summer imagery) — −／＋ for a wider or closer view."
+    src === "naip" ? "USDA NAIP (summer imagery). −／＋ for a wider or closer view."
     : src === "earth" ? earthAccuracyNote(lastAerial)
-    : "Satellite imagery — −／＋ for a wider or closer view.";
+    : "Satellite imagery: −／＋ for a wider or closer view.";
 }
 
 // Credit every base map the survey actually used, and state each one's positional tolerance.
@@ -2334,7 +2334,7 @@ function baseMapCredit() {
       bits.push(`<b>${esc(l.name)}</b>: positions on this base map are accurate to about ` +
         `${ft <= EARTH_ACC_EXACT_FT ? "under " + EARTH_ACC_EXACT_FT : ft} ft` +
         (a.relief_m > 5 ? `, measured across ${Math.round(mToFt(a.relief_m))} ft of ground and ` +
-          `tree height in view — readings beside tall trees or buildings near the edge of the ` +
+          `tree height in view. Readings beside tall trees or buildings near the edge of the ` +
           `picture are the least certain` : "") +
         (l.aerial.captured ? ` (captured ${String(l.aerial.captured).slice(0, 10)})` : "") + ".");
     });
@@ -2350,7 +2350,7 @@ function earthAccuracyNote(meta) {
   const ft = Math.round(mToFt(meta.accuracy.worst_m));
   const when = meta.captured ? " · captured " + String(meta.captured).slice(0, 10) : "";
   if (ft <= EARTH_ACC_EXACT_FT) return `Google Earth · positions accurate to under ${EARTH_ACC_EXACT_FT} ft${when}`;
-  return `Google Earth · positions accurate to about ${ft} ft — tall trees and buildings near the ` +
+  return `Google Earth · positions accurate to about ${ft} ft. Tall trees and buildings near the ` +
          `edges are the least certain${when}`;
 }
 function hideAerialBar() { const b = $("aerialBar"); if (b) b.classList.add("hidden"); }
@@ -2407,9 +2407,9 @@ function renderYouAreHere() {
 function markGpsSpot() {
   if (!geoBounds) return toast("Build an aerial from an address first");
   if (!lastGpsFix || lastGpsFix.age_sec == null || lastGpsFix.age_sec > 25) {
-    return toast("No GPS fix yet — open the GPS page & connect your phone");
+    return toast("No GPS fix yet. Open the GPS page & connect your phone");
   }
-  if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
+  if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal. Are you connected?");
   const m = gpsToMap(lastGpsFix);
   const outside = m.outside, mapX = m.mapX, mapY = m.mapY;
   const label = ($("easyRoom") && $("easyRoom").value.trim())
@@ -2490,7 +2490,7 @@ function onMapTap(ev) {
       p.mapX = x; p.mapY = y; p.level = activeLevel;
       savePoints();
       const left = unplacedPoints().length;
-      toast(left ? `Placed “${p.location}” — ${left} still to place` : `Placed “${p.location}” — that's all of them`);
+      toast(left ? `Placed “${p.location}”. ${left} still to place` : `Placed “${p.location}”. That's all of them`);
       placingId = left ? unplacedPoints()[0].id : null;
       renderPoints();
       renderCoverageMap();
@@ -2498,7 +2498,7 @@ function onMapTap(ev) {
     }
     placingId = null;
   }
-  if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal — are you connected?");
+  if (!lastScan || !lastScan.current) return toast("No Wi-Fi signal. Are you connected?");
   const label = $("easyRoom").value.trim() || "Point " + (mappedPoints(points).length + 1);
   if (!addPoint(label, lastScan.current, { mapX: x, mapY: y })) return;
   $("easyRoom").value = "";
@@ -2821,7 +2821,7 @@ function generateAutoLayout() {
   renderRooms();
   renderCoverageMap();
   saveLevels();
-  toast(rooms.length + " rooms placed — drag them to match your space");
+  toast(rooms.length + " rooms placed. Drag them to match your space");
 }
 
 function resetPlan() {
@@ -2907,9 +2907,9 @@ function setMapMode(m) {
   if (m !== "predict" && showPredict) { showPredict = false; updatePredictUI(); }
   if ($("mapHint")) {
     $("mapHint").innerHTML = m === "edit"
-      ? "<b>Arrange the rooms</b> — drag to move, grab any handle to resize, ◆ to morph a box into a custom shape (then drag corners, tap ＋ to add angles, double-click a corner to remove it), ✎ rename, ✕ delete. Then <b>Take readings</b>."
+      ? "<b>Arrange the rooms</b>: drag to move, grab any handle to resize, ◆ to morph a box into a custom shape (then drag corners, tap ＋ to add angles, double-click a corner to remove it), ✎ rename, ✕ delete. Then <b>Take readings</b>."
       : m === "perimeter"
-      ? "<b>Tap each corner of your property / area</b> to trace the boundary — the heatmap fills only inside it. Tap <b>✓ Done</b> when closed."
+      ? "<b>Tap each corner of your property / area</b> to trace the boundary. The heatmap fills only inside it. Tap <b>✓ Done</b> when closed."
       : m === "ap"
       ? "<b>Tap where the router / access point sits.</b> Name it first (Gateway, Mesh…). Tap <b>✓ Done</b> when placed."
       : m === "roomshape"
@@ -2917,7 +2917,7 @@ function setMapMode(m) {
       : m === "cal"
       ? "<b>Set the scale:</b> tap the two ends of a distance you know in real life (a wall, a door, a car length), then type the feet. Everything after reads real square footage."
       : m === "predict"
-      ? "<b>Predict coverage:</b> tap where you'd mount access points — the map models their combined coverage in real feet, so you can design placement before you ever walk it."
+      ? "<b>Predict coverage:</b> tap where you'd mount access points. The map models their combined coverage in real feet, so you can design placement before you ever walk it."
       : "Type the room above, then <b>tap the map where you're standing</b> to drop a reading.";
     $("mapHint").classList.toggle("hint-active", m === "perimeter" || m === "ap" || m === "roomshape" || m === "cal" || m === "predict");
   }
@@ -2952,7 +2952,7 @@ function clearAPs() {
 /* ---------- scale calibration (a real-distance reference for uploaded plans) ---------- */
 function toggleCalibrate() {
   if (mapMode === "cal") return cancelCalibration();
-  if (geoBounds) return toast("This aerial already has real GPS scale — no calibration needed");
+  if (geoBounds) return toast("This aerial already has real GPS scale. No calibration needed");
   if (planMode !== "image") return toast("Set scale works on an uploaded floor-plan image");
   calTemp = { a: null, b: null };
   setMapMode("cal");
@@ -2982,7 +2982,7 @@ function applyCalibration() {
   calTemp = { a: null, b: null };
   if ($("calFeet")) $("calFeet").value = "";
   setMapMode("survey");
-  toast("Scale set — square footage now available");
+  toast("Scale set. Square footage now available");
 }
 function cancelCalibration() {
   calTemp = { a: null, b: null };
@@ -3059,7 +3059,7 @@ function clearPerimeter() {
 function cornerAtGps() {
   if (!geoBounds) return toast("Build an aerial from an address first");
   if (!lastGpsFix || lastGpsFix.age_sec == null || lastGpsFix.age_sec > 25) {
-    return toast("No GPS fix yet — open the GPS page & connect your phone");
+    return toast("No GPS fix yet. Open the GPS page & connect your phone");
   }
   const m = gpsToMap(lastGpsFix);
   perimeter.push({ x: m.mapX, y: m.mapY });
@@ -3176,7 +3176,7 @@ function renderRooms() {
       const handles = ["nw", "n", "ne", "e", "se", "s", "sw", "w"].map((d) => `<span class="rh rh-${d}" onpointerdown="event.stopPropagation();roomPointerDown(event,${r.id},'${d}')"></span>`).join("");
       return `<div class="room" style="left:${(r.x * 100).toFixed(1)}%;top:${(r.y * 100).toFixed(1)}%;width:${(r.w * 100).toFixed(1)}%;height:${(r.h * 100).toFixed(1)}%" onpointerdown="roomPointerDown(event,${r.id},'move')">
         <span class="redit" onpointerdown="event.stopPropagation()" onclick="renameRoom(${r.id})">✎</span>
-        <span class="rmorph" onpointerdown="event.stopPropagation()" onclick="convertToShape(${r.id})" title="Morph into a custom shape — angled &amp; L-shaped rooms">◆</span>
+        <span class="rmorph" onpointerdown="event.stopPropagation()" onclick="convertToShape(${r.id})" title="Morph into a custom shape: angled &amp; L-shaped rooms">◆</span>
         <span class="rdel" onpointerdown="event.stopPropagation()" onclick="deleteRoom(${r.id})">✕</span>
         <div class="rname">${esc(r.name)}</div>${sub}
         ${handles}
@@ -3307,7 +3307,7 @@ function generateSchematicDataURL() {
   // page + title block
   ctx.fillStyle = "#f7f9fc"; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = "#22304d"; ctx.font = "bold 21px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
-  ctx.fillText(((curLevel() && curLevel().name) || "Floor") + " — Floor Plan", pad, pad + TH / 2);
+  ctx.fillText(((curLevel() && curLevel().name) || "Floor") + ": Floor Plan", pad, pad + TH / 2);
   if (floorSqft > 0) { ctx.textAlign = "right"; ctx.font = "14px sans-serif"; ctx.fillStyle = "#66748c"; ctx.fillText("~" + Math.round(floorSqft) + " sq ft", W - pad, pad + TH / 2); }
   // room drawing area (origin translated so relative coords map cleanly)
   const oy = pad + TH;
@@ -3404,7 +3404,7 @@ async function refreshGps() {
       if (d.fix.age_sec > 20) {
         setGpsBadge("stale", `Last fix ${age}s ago (stale)`, "Is the phone app still running & broadcasting?");
       } else {
-        setGpsBadge("ok", `Connected — ${acc}, updated ${age}s ago`,
+        setGpsBadge("ok", `Connected: ${acc}, updated ${age}s ago`,
           `Phone at ${d.fix.lat.toFixed(5)}, ${d.fix.lon.toFixed(5)}`);
       }
       renderYouAreHere(); // move the live "you are here" dot as they walk
@@ -3438,11 +3438,11 @@ async function checkGpsNow() {
   const fix = await refreshGps();
   if (fix && fix.age_sec <= 20) {
     const acc = fix.acc != null ? "±" + Math.round(fix.acc) + " m" : "accuracy unknown";
-    toast(`✅ Phone connected — ${acc}, ${Math.round(fix.age_sec)}s ago`);
+    toast(`✅ Phone connected. ${acc}, ${Math.round(fix.age_sec)}s ago`);
   } else if (fix) {
-    toast(`⚠️ Last fix ${Math.round(fix.age_sec)}s ago — is the phone app running?`);
+    toast(`⚠️ Last fix ${Math.round(fix.age_sec)}s ago. Is the phone app running?`);
   } else {
-    toast("No fix yet — open the GPS app on your phone and start broadcasting.");
+    toast("No fix yet. Open the GPS app on your phone and start broadcasting.");
   }
 }
 
@@ -3451,7 +3451,7 @@ function copyGpsUrl(id) {
   const el = $(id);
   if (!el) return;
   const text = el.textContent;
-  const done = () => toast("URL copied — paste it into your phone's GPS app");
+  const done = () => toast("URL copied. Paste it into your phone's GPS app");
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
   } else {
@@ -3470,7 +3470,7 @@ function fallbackCopy(text, done) {
     document.body.removeChild(ta);
     done();
   } catch (e) {
-    toast("Couldn't copy — select the URL and copy it manually.");
+    toast("Couldn't copy. Select the URL and copy it manually.");
   }
 }
 
@@ -3484,7 +3484,7 @@ function fallbackCopy(text, done) {
 
 function saveProfilesRegistry() {
   try { localStorage.setItem(LS_PROFILES, JSON.stringify(profiles)); localStorage.setItem(LS_ACTIVEPROFILE, activeProfile || ""); }
-  catch (e) { toast("Couldn't save profile list — storage full"); }
+  catch (e) { toast("Couldn't save profile list: storage full"); }
 }
 
 // Gather the CURRENT in-memory + field state into one self-contained bundle.
@@ -3504,7 +3504,7 @@ function snapshotActiveProfile() {
   if (!activeProfile) return;
   let ok = true;
   try { localStorage.setItem(PROFILE_PREFIX + activeProfile, JSON.stringify(profileBundle())); }
-  catch (e) { ok = false; toast("Storage full — this survey isn't fully saved to its slot"); }
+  catch (e) { ok = false; toast("Storage full. This survey isn't fully saved to its slot"); }
   const entry = profiles.find((p) => p.id === activeProfile);
   if (entry) {
     const client = ($("f_client") && $("f_client").value.trim()) || "";
@@ -3597,7 +3597,7 @@ function newProfile() {
   activeProfile = id;
   restoreProfileBundle(emptyBundle());      // reset the app to a clean survey
   try { localStorage.setItem(PROFILE_PREFIX + id, JSON.stringify(emptyBundle())); }
-  catch (e) { toast("Storage full — couldn't reserve the new survey slot"); }
+  catch (e) { toast("Storage full. Couldn't reserve the new survey slot"); }
   saveProfilesRegistry();
   renderProfileMenu();
   toggleProfileMenu(true);
@@ -3739,20 +3739,20 @@ function loadState() {
 // exporting a subset here is how the Site Plan and the active level used to vanish on reimport.
 function exportJSON() {
   const bundle = profileBundle();
-  if (!bundle.points.length && !bundle.cellPoints.length) return toast("Nothing to save yet — take some readings first.");
+  if (!bundle.points.length && !bundle.cellPoints.length) return toast("Nothing to save yet. Take some readings first.");
   const blob = new Blob([JSON.stringify({ format: "wifi-survey", version: 1, ...bundle }, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "wifi-survey-" + (($("f_client") && $("f_client").value) || "site").replace(/\W+/g, "_") + ".json";
   a.click();
-  toast(`Survey file saved — ${bundle.points.length} readings, re-open it here any time`);
+  toast(`Survey file saved: ${bundle.points.length} readings, re-open it here any time`);
 }
 
 // Export every reading as a plain CSV — the format clients actually open (Excel/Numbers/Sheets).
 // One row per reading with room/floor attribution, all RF metrics, throughput and GPS.
 function exportCSV() {
   saveLevelMap();
-  if (!points.length) return toast("No readings yet — take some on the Coverage page first.");
+  if (!points.length) return toast("No readings yet. Take some on the Coverage page first.");
   const q = (v) => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const cols = ["#", "Room", "Floor", "Point", "SSID", "Band", "Channel", "Width", "RSSI (dBm)", "Noise", "SNR (dB)", "PHY", "Rate (Mbps)", "Down (Mbps)", "Up (Mbps)", "Latency (ms)", "Loss %", "Security", "Rating", "GPS lat", "GPS lon", "GPS +/-m"];
   const rows = points.map((p, i) => {
@@ -3770,7 +3770,7 @@ function exportCSV() {
   a.href = URL.createObjectURL(blob);
   a.download = "wifi-survey-" + (($("f_client") && $("f_client").value) || "site").replace(/\W+/g, "_") + ".csv";
   a.click();
-  toast("CSV saved — opens in Excel / Numbers / Sheets");
+  toast("CSV saved. Opens in Excel / Numbers / Sheets");
 }
 
 // Export readings + perimeter + AP markers to a KML file that opens directly in
@@ -3804,16 +3804,16 @@ function toggleLiveEarth() {
   liveOn = !liveOn;
   const b = $("btnLive");
   if (b) { b.classList.toggle("on", liveOn); b.textContent = liveOn ? "🛑 Stop live view" : "🛰 Live in Google Earth"; }
-  if (!liveOn) { clearTimeout(livePush); return toast("Live view stopped — Google Earth will keep the last picture."); }
+  if (!liveOn) { clearTimeout(livePush); return toast("Live view stopped. Google Earth will keep the last picture."); }
   if (liveOpened) {
-    toast("Live view resumed — Google Earth is already watching.");
+    toast("Live view resumed. Google Earth is already watching.");
     return pushLive();
   }
   api("/api/live/open", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
     .then((r) => {
       if (!r.ok) return liveOff(r.error || "Couldn't open Google Earth.");
       liveOpened = true;
-      toast(`Live view on — Google Earth refreshes every ${r.refresh}s as you walk.`);
+      toast(`Live view on. Google Earth refreshes every ${r.refresh}s as you walk.`);
       // Earth draws its 3D trees on top of the coverage wash, so on a wooded lot the colour only
       // shows through gaps in the canopy. There is no way to fix that from the KML side.
       const hint = $("liveHint");
@@ -3840,14 +3840,14 @@ async function pushLive() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ doc: built.doc, overlay: built.overlay }),
     });
-    if (liveStalled) { liveStalled = false; toast("Live view caught up — Google Earth is current again."); }
+    if (liveStalled) { liveStalled = false; toast("Live view caught up. Google Earth is current again."); }
   } catch (e) {
     // Swallowing this was wrong. Google Earth keeps polling happily and keeps redrawing the LAST
     // ACCEPTED frame, so a stalled push looks exactly like a working one. And a push that failed
     // on size never recovers by itself — readings only accumulate. Say it once per stall.
     if (!liveStalled) {
       liveStalled = true;
-      warn("Google Earth is showing an older picture — " + (e.message || "the update didn't go through"));
+      warn("Google Earth is showing an older picture: " + (e.message || "the update didn't go through"));
     }
   }
 }
@@ -4083,14 +4083,14 @@ function exportKML() {
   const built = buildSurveyKml({});
   const doc = '<?xml version="1.0" encoding="UTF-8"?>\n'
     + '<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
-    + `<name>${esc(client ? client + " — WiFi Survey" : "WiFi Survey")}</name>`
+    + `<name>${esc(client ? client + ": WiFi Survey" : "WiFi Survey")}</name>`
     + built.doc + '</Document></kml>';
   const files = [{ name: "doc.kml", bytes: new TextEncoder().encode(doc) }, ...built.files];
   const a = document.createElement("a");
   a.href = URL.createObjectURL(makeZip(files));
   a.download = (client || "site").replace(/\W+/g, "_") + ".kmz";
   a.click();
-  toast("KMZ saved — open it in Google Earth to see the coverage overlay");
+  toast("KMZ saved. Open it in Google Earth to see the coverage overlay");
 }
 // Opening a file REPLACES the survey on screen, so it has to ask first — the neutral-looking
 // button was the one destructive action in the app with no confirm.
@@ -4100,13 +4100,13 @@ function importJSON(ev) {
   const r = new FileReader();
   r.onload = () => {
     let d;
-    try { d = JSON.parse(r.result); } catch (e) { return warn("Import failed — that isn't a survey file."); }
+    try { d = JSON.parse(r.result); } catch (e) { return warn("Import failed. That isn't a survey file."); }
     if (!d || typeof d !== "object" || (!Array.isArray(d.points) && !Array.isArray(d.levels))) {
-      return warn("Import failed — that file has no survey data in it.");
+      return warn("Import failed. That file has no survey data in it.");
     }
     const live = points.length + cellPoints.length;
     if (live && !confirm(
-      `Open this survey file?\n\nIt replaces what's on screen now — ${points.length} readings and ${cellPoints.length} candidate spots.\n\n` +
+      `Open this survey file?\n\nIt replaces what's on screen now: ${points.length} readings and ${cellPoints.length} candidate spots.\n\n` +
       `Cancel and use “Save survey file” first if you haven't backed this one up.`
     )) return;
     restoreProfileBundle(d);
@@ -4116,7 +4116,7 @@ function importJSON(ev) {
     savePoints();
     renderPoints();
     renderCoverageMap();
-    toast(`Opened — ${points.length} readings`);
+    toast(`Opened: ${points.length} readings`);
   };
   r.readAsText(file);
   ev.target.value = "";
@@ -4200,35 +4200,35 @@ function computeInsights(pts, site, env) {
   if ((sig.length && dead.length / sig.length >= 0.25) || (cellPoints.length && bestSinr != null && bestSinr < 0)) score = Math.min(score, 49);
   const grade = score >= 90 ? ["Excellent"] : score >= 75 ? ["Good"] : score >= 60 ? ["Fair"] : score >= 40 ? ["Poor"] : ["Critical"];
 
-  if (pts.length >= 1 && pts.length < 4) F.push({ severity: "info", text: `Only ${pts.length} reading${pts.length > 1 ? "s" : ""} captured — conclusions are provisional until more rooms are sampled.`, rec: "Aim for about one reading per 400–500 sq ft plus the corners farthest from the router." });
+  if (pts.length >= 1 && pts.length < 4) F.push({ severity: "info", text: `Only ${pts.length} reading${pts.length > 1 ? "s" : ""} captured. Conclusions are provisional until more rooms are sampled.`, rec: "Aim for about one reading per 400–500 sq ft plus the corners farthest from the router." });
   // Area has to be measured over the readings that actually sit on the map — `sig` includes
   // Live-page readings with no position (x/y NaN) and readings from other floors, which drove
   // this figure to 0 and silently dropped the sentence while the dashboard still showed a count.
-  if (dead.length) { const w = dead.reduce((a, b) => (b.signal < a.signal ? b : a)); const holeFt = holeAreaSqft(-75, mappedPoints(pts)); const areaTxt = holeFt ? ` About <b>${fmtSqft(holeFt)}</b> of the surveyed area falls below −75 dBm.` : ""; F.push({ severity: "critical", text: `<b>${dead.length} dead zone${dead.length > 1 ? "s" : ""}</b> below −75 dBm: ${nm(dead)}.${areaTxt} The worst is ${esc(w.location)} at ${w.signal} dBm — Wi-Fi calls drop and smart devices fall offline here.`, rec: `Add a mesh node or wired access point roughly midway between the router and ${esc(w.location)}. A wired-backhaul node beats a repeater since the feeding signal is already ${w.signal} dBm. Re-measure to confirm the far rooms clear −67 dBm.`, loc: locOf(w) }); }
+  if (dead.length) { const w = dead.reduce((a, b) => (b.signal < a.signal ? b : a)); const holeFt = holeAreaSqft(-75, mappedPoints(pts)); const areaTxt = holeFt ? ` About <b>${fmtSqft(holeFt)}</b> of the surveyed area falls below −75 dBm.` : ""; F.push({ severity: "critical", text: `<b>${dead.length} dead zone${dead.length > 1 ? "s" : ""}</b> below −75 dBm: ${nm(dead)}.${areaTxt} The worst is ${esc(w.location)} at ${w.signal} dBm. Wi-Fi calls drop and smart devices fall offline here.`, rec: `Add a mesh node or wired access point roughly midway between the router and ${esc(w.location)}. A wired-backhaul node beats a repeater since the feeding signal is already ${w.signal} dBm. Re-measure to confirm the far rooms clear −67 dBm.`, loc: locOf(w) }); }
   if (marg.length) { const wm = marg.reduce((a, b) => (b.signal < a.signal ? b : a)); F.push({ severity: "warning", text: `${marg.length} marginal location${marg.length > 1 ? "s" : ""} (−68 to −75 dBm): ${nm(marg)}. Fine for browsing, borderline for 4K, video calls, and gaming when busy.`, rec: dead.length ? "Position any new access point so it overlaps both the dead zones and these rooms." : "Relocate the gateway higher and more central first; add one AP only if these rooms are heavily used.", loc: locOf(wm) }); }
-  if (lowSnr.length) { const w = lowSnr.reduce((a, b) => (b.snr < a.snr ? b : a)); F.push({ severity: "warning", text: `${lowSnr.length} location${lowSnr.length > 1 ? "s" : ""} show strong signal but noisy air (SNR under 15 dB): ${nm(lowSnr)}. Lowest is ${esc(w.location)} at SNR ${w.snr} dB — bars look fine but throughput suffers.`, rec: "This is interference, not distance — adding an AP won't help. Move the gateway to a cleaner channel (2.4 GHz: stick to 1/6/11).", loc: locOf(w) }); }
-  if (co.length >= 2) { const top = co.slice(0, 3).map((n) => esc(n.ssid || "(hidden)")).join(", "); F.push({ severity: "warning", text: `Channel ${scanEnv.current.channel} (${scanEnv.current.band || "?"}) is crowded — ${co.length} neighboring networks share it${top ? ", including " + top : ""}. Co-channel networks split airtime even at full signal.`, rec: "Change the gateway's channel to a quieter one (2.4 GHz: least-busy of 1/6/11) or enable auto-channel. Keep 2.4 GHz at 20 MHz width." }); }
-  if (all24 && has5) F.push({ severity: "warning", text: "Every surveyed room connected on 2.4 GHz even though 5 GHz is available nearby — the client is stuck on the slower, congested band, capping speeds regardless of signal.", rec: "Enable band steering (single SSID, router picks the band) or manually join 5 GHz near the router. Keep 2.4 GHz for far rooms and IoT." });
+  if (lowSnr.length) { const w = lowSnr.reduce((a, b) => (b.snr < a.snr ? b : a)); F.push({ severity: "warning", text: `${lowSnr.length} location${lowSnr.length > 1 ? "s" : ""} show strong signal but noisy air (SNR under 15 dB): ${nm(lowSnr)}. Lowest is ${esc(w.location)} at SNR ${w.snr} dB. Bars look fine but throughput suffers.`, rec: "This is interference, not distance. Adding an AP won't help. Move the gateway to a cleaner channel (2.4 GHz: stick to 1/6/11).", loc: locOf(w) }); }
+  if (co.length >= 2) { const top = co.slice(0, 3).map((n) => esc(n.ssid || "(hidden)")).join(", "); F.push({ severity: "warning", text: `Channel ${scanEnv.current.channel} (${scanEnv.current.band || "?"}) is crowded: ${co.length} neighboring networks share it${top ? ", including " + top : ""}. Co-channel networks split airtime even at full signal.`, rec: "Change the gateway's channel to a quieter one (2.4 GHz: least-busy of 1/6/11) or enable auto-channel. Keep 2.4 GHz at 20 MHz width." }); }
+  if (all24 && has5) F.push({ severity: "warning", text: "Every surveyed room connected on 2.4 GHz even though 5 GHz is available nearby. The client is stuck on the slower, congested band, capping speeds regardless of signal.", rec: "Enable band steering (single SSID, router picks the band) or manually join 5 GHz near the router. Keep 2.4 GHz for far rooms and IoT." });
   if (scanEnv && scanEnv.current) {
     const sg = secGrade(scanEnv.current.security), nm2 = esc(scanEnv.current.ssid || "the client network");
-    if (sg.g === "open") F.push({ severity: "critical", text: `The client network “${nm2}” is <b>open (no encryption)</b> — anyone in range can read traffic and join.`, rec: "Enable WPA3 (or WPA2 at minimum) on the gateway before handoff." });
+    if (sg.g === "open") F.push({ severity: "critical", text: `The client network “${nm2}” is <b>open (no encryption)</b>. Anyone in range can read traffic and join.`, rec: "Enable WPA3 (or WPA2 at minimum) on the gateway before handoff." });
     else if (sg.g === "wep" || sg.g === "wpa") F.push({ severity: "warning", text: `“${nm2}” uses <b>${esc(sg.label)}</b>, which is outdated and crackable.`, rec: "Upgrade the gateway to WPA2 or, preferably, WPA3." });
     else if (sg.g === "wpa2" && wifiGen(scanEnv.current).g >= 6) F.push({ severity: "info", text: `“${nm2}” runs modern Wi-Fi but only WPA2 security. WPA3 adds stronger encryption and protected management frames.`, rec: "Switch to WPA3 (or WPA2/WPA3 transitional) if all client devices support it." });
     const infraAll = [scanEnv.current].concat(scanEnv.nearby || []);
     const sixBad = analyzeInfra(infraAll).sixViolation;
-    if (sixBad) F.push({ severity: "warning", text: `${sixBad} access point${sixBad > 1 ? "s are" : " is"} broadcasting on 6 GHz without WPA3 — the 6 GHz band mandates WPA3/OWE.`, rec: "Reconfigure those APs for WPA3; some clients won't connect to a non-compliant 6 GHz SSID." });
+    if (sixBad) F.push({ severity: "warning", text: `${sixBad} access point${sixBad > 1 ? "s are" : " is"} broadcasting on 6 GHz without WPA3. The 6 GHz band mandates WPA3/OWE.`, rec: "Reconfigure those APs for WPA3; some clients won't connect to a non-compliant 6 GHz SSID." });
   }
-  if (plan && thr.length) { const low = thr.filter((p) => p.download_mbps < plan * 0.5); if (low.length) { const w = low.reduce((a, b) => (b.download_mbps < a.download_mbps ? b : a)); F.push({ severity: "warning", text: `Throughput fell below half the ${plan} Mbps plan at ${nm(low)}. Slowest: ${esc(w.location)} at ${w.download_mbps} Mbps (${Math.round(w.download_mbps / plan * 100)}% of plan).`, rec: "Where this tracks weak signal, fixing coverage fixes speed. Where signal is strong but speed is low, suspect 2.4 GHz, congestion, or the WAN feed — run a wired test at the gateway." }); } }
-  if (levels.length > 1) levels.forEach((L) => { const fp = pts.filter((p) => p.level === L.id && p.signal != null); if (fp.length && fp.filter((p) => p.signal < -75).length / fp.length >= 0.5) F.push({ severity: "critical", text: `${esc(L.name)} is under-served — ${Math.round(fp.filter((p) => p.signal < -75).length / fp.length * 100)}% of its readings are dead zones. Wi-Fi struggles to pass between floors.`, rec: `Add an access point on ${esc(L.name)}, ideally stacked near the router's vertical position or wired back to it. Re-survey after adding.` }); });
+  if (plan && thr.length) { const low = thr.filter((p) => p.download_mbps < plan * 0.5); if (low.length) { const w = low.reduce((a, b) => (b.download_mbps < a.download_mbps ? b : a)); F.push({ severity: "warning", text: `Throughput fell below half the ${plan} Mbps plan at ${nm(low)}. Slowest: ${esc(w.location)} at ${w.download_mbps} Mbps (${Math.round(w.download_mbps / plan * 100)}% of plan).`, rec: "Where this tracks weak signal, fixing coverage fixes speed. Where signal is strong but speed is low, suspect 2.4 GHz, congestion, or the WAN feed. Run a wired test at the gateway." }); } }
+  if (levels.length > 1) levels.forEach((L) => { const fp = pts.filter((p) => p.level === L.id && p.signal != null); if (fp.length && fp.filter((p) => p.signal < -75).length / fp.length >= 0.5) F.push({ severity: "critical", text: `${esc(L.name)} is under-served: ${Math.round(fp.filter((p) => p.signal < -75).length / fp.length * 100)}% of its readings are dead zones. Wi-Fi struggles to pass between floors.`, rec: `Add an access point on ${esc(L.name)}, ideally stacked near the router's vertical position or wired back to it. Re-survey after adding.` }); });
   if (cellPoints.length) {
     const b = bestCellSpot();
     const allBad = cellPoints.every((c) => (c.nr_sinr == null || c.nr_sinr < 0) && (c.lte_sinr == null || c.lte_sinr < 0));
-    if (allBad) F.push({ severity: "critical", text: `Every candidate spot shows poor cellular quality (SINR below 0 dB) — best was ${esc(b.location)} at 5G SINR ${b.nr_sinr ?? b.lte_sinr}. The gateway's WAN feed caps every downstream Wi-Fi speed.`, rec: "Improve the gateway signal first: try upper floors and windows facing the tower; mount the Waveform 2×2 antenna outside/high with clear line-of-sight until 5G SINR clears +5 dB." });
-    else if (bestSinr != null && bestSinr < 13) F.push({ severity: "warning", text: `The best cellular spot (${esc(b.location)}) is only marginal at 5G SINR ${bestSinr} dB — usable but short of the 13+ dB that gives reliable full-speed service.`, rec: "Keep hunting: try higher and nearer a window facing the tower, and test an external antenna before committing." });
-    else F.push({ severity: "good", text: `Best cellular placement is ${esc(b.location)} — 5G SINR ${b.nr_sinr ?? "—"} dB, RSRP ${b.nr_rsrp ?? "—"} dBm. A clean spot for the gateway.`, rec: `Mount the gateway and Waveform 2×2 antenna at ${esc(b.location)} with clear line-of-sight to the tower. SINR matters more than RSRP — favor the cleaner signal.` });
+    if (allBad) F.push({ severity: "critical", text: `Every candidate spot shows poor cellular quality (SINR below 0 dB). Best was ${esc(b.location)} at 5G SINR ${b.nr_sinr ?? b.lte_sinr}. The gateway's WAN feed caps every downstream Wi-Fi speed.`, rec: "Improve the gateway signal first: try upper floors and windows facing the tower; mount the Waveform 2×2 antenna outside/high with clear line-of-sight until 5G SINR clears +5 dB." });
+    else if (bestSinr != null && bestSinr < 13) F.push({ severity: "warning", text: `The best cellular spot (${esc(b.location)}) is only marginal at 5G SINR ${bestSinr} dB, usable but short of the 13+ dB that gives reliable full-speed service.`, rec: "Keep hunting: try higher and nearer a window facing the tower, and test an external antenna before committing." });
+    else F.push({ severity: "good", text: `Best cellular placement is ${esc(b.location)}: 5G SINR ${b.nr_sinr ?? "—"} dB, RSRP ${b.nr_rsrp ?? "—"} dBm. A clean spot for the gateway.`, rec: `Mount the gateway and Waveform 2×2 antenna at ${esc(b.location)} with clear line-of-sight to the tower. SINR matters more than RSRP. Favor the cleaner signal.` });
   }
-  if (pts.length >= 4 && !dead.length && !marg.length && !lowSnr.length) F.push({ severity: "good", text: `Coverage is solid across all ${distinctRooms(pts)} surveyed rooms — every reading is Good or better with clean SNR. No dead zones, no interference flags.`, rec: "No additional access points needed. Keep the gateway in place; re-survey the far corners if the device count grows." });
-  if (pts.length >= 3 && (dead.length || marg.length)) F.push({ severity: "info", text: "Router placement drives everything downstream.", rec: "Place the gateway central and high — off the floor, out of cabinets, away from metal, mirrors, and the microwave. A central router often fixes problem rooms more cheaply than new hardware." });
+  if (pts.length >= 4 && !dead.length && !marg.length && !lowSnr.length) F.push({ severity: "good", text: `Coverage is solid across all ${distinctRooms(pts)} surveyed rooms. Every reading is Good or better with clean SNR. No dead zones, no interference flags.`, rec: "No additional access points needed. Keep the gateway in place; re-survey the far corners if the device count grows." });
+  if (pts.length >= 3 && (dead.length || marg.length)) F.push({ severity: "info", text: "Router placement drives everything downstream.", rec: "Place the gateway central and high: off the floor, out of cabinets, away from metal, mirrors, and the microwave. A central router often fixes problem rooms more cheaply than new hardware." });
 
   const order = { critical: 0, warning: 1, good: 2, info: 3 };
   const sorted = F.sort((a, b) => order[a.severity] - order[b.severity]);
@@ -4319,7 +4319,7 @@ function buildReport(site, pts) {
   const areaFtR = surveyedSqft(mappedNow), holeFtR = dead.length ? holeAreaSqft(-75, mappedNow) : 0;
   const gword = (ins.grade || "").toLowerCase();
   const verdict = dead.length === 0
-    ? `The Wi-Fi here is <b>${gword}</b> — every room we surveyed has reliable coverage, with no dead zones to fix.`
+    ? `The Wi-Fi here is <b>${gword}</b>. Every room we surveyed has reliable coverage, with no dead zones to fix.`
     : `The Wi-Fi here is <b>${gword}</b> overall, but <b>${dead.length} area${dead.length > 1 ? "s" : ""}</b> ${dead.length > 1 ? "need" : "needs"} attention before coverage is solid everywhere.`;
   const blk = (n, l, color) => `<div class="blk"><div class="blk-n"${color ? ` style="color:${color}"` : ""}>${n}</div><div class="blk-l">${l}</div></div>`;
   const bottomLine = `<div class="bottomline">${healthBadge(ins, 108)}<div class="bl-main"><div class="bl-verdict">${verdict}</div><div class="bl-kpis">
@@ -4393,7 +4393,7 @@ function buildReport(site, pts) {
     if (rp && l.id === activeLevel) {
       const rs = requirementStats(pl);
       const sqPass = rs.ok ? ` (≈ ${Math.round((area * rs.pct) / 100).toLocaleString()} ft²)` : "";
-      out += `<p class="legend"><b>Requirement — ${esc(rp.label)}</b> (${esc(reqGateText(rp))}): ${rs.ok ? `an estimated <b>${rs.pct}%</b>${sqPass} of this floor passes` : "insufficient readings to score"}. Greyed cells fall short of target.</p>`;
+      out += `<p class="legend"><b>Requirement: ${esc(rp.label)}</b> (${esc(reqGateText(rp))}): ${rs.ok ? `an estimated <b>${rs.pct}%</b>${sqPass} of this floor passes` : "insufficient readings to score"}. Greyed cells fall short of target.</p>`;
     }
     return out;
   };
@@ -4401,7 +4401,7 @@ function buildReport(site, pts) {
   const levelShots = levels.filter((l) => l.snapshot);
   if (levelShots.length) {
     heatmapSection = levelShots.map((l) =>
-      `<h2>Coverage — ${esc(l.name)}</h2><img class="hm" src="${safeImgSrc(l.snapshot)}">${floorFigures(l)}`).join("");
+      `<h2>Coverage: ${esc(l.name)}</h2><img class="hm" src="${safeImgSrc(l.snapshot)}">${floorFigures(l)}`).join("");
   } else {
     const coverImg = generateMapDataURL() || heatmapDataUrl;
     const cur = levels.find((l) => l.id === activeLevel);
@@ -4409,7 +4409,7 @@ function buildReport(site, pts) {
       ? `<h2>Coverage Heatmap</h2><img class="hm" src="${safeImgSrc(coverImg)}">${cur ? floorFigures(cur) : ""}` : "";
   }
   if (heatmapSection) {
-    heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label} — Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}) — weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>
+    heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label}. Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}), weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>
       <p class="legend">Each reading is marked <b>E</b> excellent, <b>G</b> good, <b>W</b> weak or <b>D</b> dead zone, so the map reads correctly in greyscale and with colour blindness.</p>`;
     heatmapSection += baseMapCredit();
   }
@@ -4436,9 +4436,9 @@ function buildReport(site, pts) {
     // one taken wherever the laptop happened to be when the report was printed.
     const when = importedScan.length ? "Imported from an external scan."
       : env && env.ts ? `Recorded during the survey, ${new Date(env.ts).toLocaleString()}.`
-      : "Read live when this report was generated, not during the survey — treat as indicative.";
+      : "Read live when this report was generated, not during the survey. Treat as indicative.";
     rfSection = `<h2>Interference &amp; Nearby Networks</h2>
-      <p>${importedScan.length ? `Imported WiFi&nbsp;Explorer scan of <b>${scan.length}</b> networks. ` : `${cur ? `The network was surveyed on <b>channel ${cur.channel} (${cur.band || "?"})</b>. ` : ""}`}${co.length ? `<b>${co.length}</b> neighboring network${co.length > 1 ? "s share" : " shares"} the surveyed channel — a common cause of slowdowns even at full signal.` : "No neighbors share the surveyed channel — the RF environment is clean."} ${scan.length} networks detected in total.</p>
+      <p>${importedScan.length ? `Imported WiFi&nbsp;Explorer scan of <b>${scan.length}</b> networks. ` : `${cur ? `The network was surveyed on <b>channel ${cur.channel} (${cur.band || "?"})</b>. ` : ""}`}${co.length ? `<b>${co.length}</b> neighboring network${co.length > 1 ? "s share" : " shares"} the surveyed channel, a common cause of slowdowns even at full signal.` : "No neighbors share the surveyed channel. The RF environment is clean."} ${scan.length} networks detected in total.</p>
       <p class="legend">${when}</p>
       <div class="tw"><table><thead><tr>${rfHead}</tr></thead><tbody>${nrows}</tbody></table></div>`;
   }
@@ -4461,7 +4461,7 @@ function buildReport(site, pts) {
       if (infra.legacy) flags.push(`<b>${infra.legacy}</b> using outdated WEP/WPA security`);
       if (infra.sixViolation) flags.push(`<b>${infra.sixViolation}</b> AP${infra.sixViolation > 1 ? "s" : ""} on 6 GHz without WPA3 (6 GHz mandates WPA3)`);
       const flagHtml = flags.length ? `<p class="legend" style="color:#b45309">⚠︎ ${flags.join(" · ")}.</p>` : `<p class="legend">No open, legacy-encryption, or 6 GHz compliance issues among visible networks.</p>`;
-      const note = infraAps.length === 1 && cur3 ? `<p class="legend" style="opacity:.7;font-size:11px">Only the connected network was visible — grant the survey app Location Services access on this Mac for a full neighbor-AP inventory. Generation reflects the highest standard each AP advertises; security shown as reported (WPA3 implies PMF, not independently confirmed on macOS).</p>` : `<p class="legend" style="opacity:.7;font-size:11px">Generation reflects the highest standard each AP advertises. Security shown as reported (WPA3 implies PMF, not independently confirmed on macOS).</p>`;
+      const note = infraAps.length === 1 && cur3 ? `<p class="legend" style="opacity:.7;font-size:11px">Only the connected network was visible. Grant the survey app Location Services access on this Mac for a full neighbor-AP inventory. Generation reflects the highest standard each AP advertises; security shown as reported (WPA3 implies PMF, not independently confirmed on macOS).</p>` : `<p class="legend" style="opacity:.7;font-size:11px">Generation reflects the highest standard each AP advertises. Security shown as reported (WPA3 implies PMF, not independently confirmed on macOS).</p>`;
       postureSection = `<h2>Infrastructure &amp; Security</h2>
         <p><b>Wi-Fi generations in range:</b></p><p>${genChips}</p>
         <p><b>Bands in use:</b></p><p>${bandChips}</p>
@@ -4475,10 +4475,10 @@ function buildReport(site, pts) {
   if (cellPoints.length) {
     const cbest = bestCellSpot();
     const crows = cellPoints.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.location)}</td><td>${p.nr_sinr ?? "—"}</td><td>${p.nr_rsrp ?? "—"}</td><td>${esc(p.nr_band || "—")}</td><td>${p.lte_sinr ?? "—"}</td><td>${p.lte_rsrp ?? "—"}</td></tr>`).join("");
-    cellSection = `<h2>Cellular WAN — Antenna Placement</h2>
-      <p>The T-Mobile gateway's cellular signal is the internet feed everything else depends on. Higher <b>SINR</b> means faster, steadier service — mount the Waveform 2×2 antenna at the cleanest spot with clear line-of-sight to the tower.</p>
+    cellSection = `<h2>Cellular WAN: Antenna Placement</h2>
+      <p>The T-Mobile gateway's cellular signal is the internet feed everything else depends on. Higher <b>SINR</b> means faster, steadier service. Mount the Waveform 2×2 antenna at the cleanest spot with clear line-of-sight to the tower.</p>
       <div class="tw"><table><thead><tr><th>#</th><th>Candidate spot</th><th>5G SINR</th><th>5G RSRP</th><th>5G Band</th><th>LTE SINR</th><th>LTE RSRP</th></tr></thead><tbody>${crows}</tbody></table></div>
-      <p style="margin-top:10px"><b>Recommended mount location: ${esc(cbest.location)}</b> — 5G SINR ${cbest.nr_sinr ?? "—"} dB, RSRP ${cbest.nr_rsrp ?? "—"} dBm${cbest.nr_band ? " (band " + esc(cbest.nr_band) + ")" : ""}.</p>`;
+      <p style="margin-top:10px"><b>Recommended mount location: ${esc(cbest.location)}</b>. 5G SINR ${cbest.nr_sinr ?? "—"} dB, RSRP ${cbest.nr_rsrp ?? "—"} dBm${cbest.nr_band ? " (band " + esc(cbest.nr_band) + ")" : ""}.</p>`;
   }
 
   // remediation plan
@@ -4496,7 +4496,7 @@ function buildReport(site, pts) {
     photosSection = `<h2>Site Photos</h2><div class="pgrid">${cards}</div>`;
   }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wi-Fi Report — ${esc(site.f_client || "Report")}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wi-Fi Report: ${esc(site.f_client || "Report")}</title>
 <style>
   @page{margin:15mm}
   html{background:#fff}
@@ -4597,7 +4597,7 @@ ${photosSection}
 
 <div class="appendix-divider">
   <h2>Technical Appendix</h2>
-  <p>The measurements and detail behind the summary above — for the installer or IT team. Nothing here changes the recommendations; it's the supporting data.</p>
+  <p>The measurements and detail behind the summary above, for the installer or IT team. Nothing here changes the recommendations; it's the supporting data.</p>
 </div>
 <div class="appx">
 
@@ -4626,7 +4626,7 @@ ${photosSection}
 </div>
 ${subBars ? `<div style="margin-top:14px">${subBars}</div><p class="legend">Each sub-score is 0–100; the overall score weights coverage most heavily and is capped when dead zones exist so the headline number never overstates the network.</p>` : ""}
 
-<h2>Survey Results — Room by Room</h2>
+<h2>Survey Results: Room by Room</h2>
 <div class="tw"><table><thead><tr><th>#</th><th>Point</th><th>Floor</th><th>SSID</th><th>Band / Ch</th><th>RSSI</th><th>Noise</th><th>SNR</th><th>PHY / Rate</th><th>↓/↑ Mbps</th><th>Latency</th><th>Security</th><th>Rating</th>${gpsHead}</tr></thead>
 <tbody>${rows}</tbody></table></div>
 <div class="legend">Rating (RSSI): Excellent ≥ −55 · Good −56 to −67 · Fair −68 to −75 · Poor &lt; −75. −67 dBm is the reliable-connectivity line; SNR &lt; 15 dB flags a noisy link.</div>
@@ -4638,7 +4638,7 @@ ${cellSection}
 </div>
 
 <h2>Methodology &amp; Notes</h2>
-<p>Wi-Fi readings were taken with a MacBook (built-in Wi-Fi radio) using native macOS telemetry (<i>system_profiler</i>), Apple's <i>networkQuality</i> for throughput, and <i>ping</i> for latency/loss — one reading per room, device held ~1 m off the floor, stationary. Cellular placement readings come from the gateway's own 5G/LTE SINR &amp; RSRP telemetry. Coverage heatmaps are interpolated between measured points. This survey does not assess non-Wi-Fi (spectrum) interference, which requires dedicated hardware.</p>
+<p>Wi-Fi readings were taken with a MacBook (built-in Wi-Fi radio) using native macOS telemetry (<i>system_profiler</i>), Apple's <i>networkQuality</i> for throughput, and <i>ping</i> for latency/loss. One reading per room, device held ~1 m off the floor, stationary. Cellular placement readings come from the gateway's own 5G/LTE SINR &amp; RSRP telemetry. Coverage heatmaps are interpolated between measured points. This survey does not assess non-Wi-Fi (spectrum) interference, which requires dedicated hardware.</p>
 <footer>Generated ${today} · Wi-Fi Site Survey. Readings are point-in-time and vary with device, orientation, and interference. Wi-Fi signal score is an automated estimate to guide decisions, not a guarantee.</footer>
 </body></html>`;
 }
@@ -4649,7 +4649,7 @@ function ingestFile(ev) {
   if (!file) return;
   const name = (file.name || "").toLowerCase();
   const st = $("ingestStatus");
-  if (file.type.indexOf("image") === 0) { attachHeatmap(ev); if (st) st.innerHTML = "✅ Heatmap image attached — it will appear in the report."; return; }
+  if (file.type.indexOf("image") === 0) { attachHeatmap(ev); if (st) st.innerHTML = "✅ Heatmap image attached. It will appear in the report."; return; }
   if (name.endsWith(".pcap") || name.endsWith(".pcapng") || name.endsWith(".cap")) {
     // binary capture — MUST read as an ArrayBuffer (readAsText would corrupt every byte ≥ 0x80)
     const rb = new FileReader();
@@ -4660,9 +4660,9 @@ function ingestFile(ev) {
         importedScan = scan;
         store(LS_IMPORTEDSCAN, JSON.stringify(scan));
         renderReportInsights();
-        if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> network${scan.length > 1 ? "s" : ""} from the packet capture — channel, signal &amp; security now feed the report's RF analysis.`;
+        if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> network${scan.length > 1 ? "s" : ""} from the packet capture. Channel, signal &amp; security now feed the report's RF analysis.`;
       } else if (st) {
-        st.innerHTML = "No Wi-Fi networks in that capture. A pcap only carries network info when it's a <b>monitor-mode</b> 802.11 capture (e.g. <code>sudo tcpdump -I -i en0 -w cap.pcap</code>) — a normal capture has no beacon frames to read.";
+        st.innerHTML = "No Wi-Fi networks in that capture. A pcap only carries network info when it's a <b>monitor-mode</b> 802.11 capture (e.g. <code>sudo tcpdump -I -i en0 -w cap.pcap</code>). A normal capture has no beacon frames to read.";
       }
     };
     rb.readAsArrayBuffer(file);
@@ -4679,10 +4679,10 @@ function ingestFile(ev) {
       importedScan = scan;
       store(LS_IMPORTEDSCAN, JSON.stringify(scan));
       renderReportInsights();
-      if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> networks from WiFi&nbsp;Explorer — they now feed the report's interference / RF analysis (channel, width, security, vendor).`;
+      if (st) st.innerHTML = `✅ Ingested <b>${scan.length}</b> networks from WiFi&nbsp;Explorer. They now feed the report's interference / RF analysis (channel, width, security, vendor).`;
     } else if (st && text.indexOf("<plist") >= 0) {
       st.innerHTML = "That looks like a saved WiFi&nbsp;Explorer document. In WiFi Explorer use <b>File → Export As… → CSV</b>, then drop that file here.";
-    } else if (st) st.textContent = "Couldn't read that file — expected a WiFi Explorer / NetSpot scan CSV or a survey .json.";
+    } else if (st) st.textContent = "Couldn't read that file: expected a WiFi Explorer / NetSpot scan CSV or a survey .json.";
   };
   r.readAsText(file);
   ev.target.value = "";
@@ -4693,7 +4693,7 @@ function importSurveyText(text) {
   const st = $("ingestStatus");
   let d;
   try { d = JSON.parse(text); } catch (e) {
-    if (st) st.textContent = "Import failed — that .json wasn't a valid survey file.";
+    if (st) st.textContent = "Import failed. That .json wasn't a valid survey file.";
     return;
   }
   if (!d || typeof d !== "object" || (!Array.isArray(d.points) && !Array.isArray(d.levels))) {
@@ -4702,14 +4702,14 @@ function importSurveyText(text) {
   }
   const live = points.length + cellPoints.length;
   if (live && !confirm(
-    `Open this survey file?\n\nIt replaces what's on screen now — ${points.length} readings and ${cellPoints.length} candidate spots.`
+    `Open this survey file?\n\nIt replaces what's on screen now: ${points.length} readings and ${cellPoints.length} candidate spots.`
   )) return;
   restoreProfileBundle(d);
   points.forEach((p) => { if (!p.level) p.level = activeLevel; });
   savePoints();
   renderPoints();
   renderCoverageMap();
-  if (st) st.innerHTML = `✅ Imported survey — <b>${points.length}</b> readings restored.`;
+  if (st) st.innerHTML = `✅ Imported survey. <b>${points.length}</b> readings restored.`;
 }
 function parseScanCSV(text) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -4900,7 +4900,7 @@ function pcapParsePcapng(dv, le) {
 
 /* ---------- guide + glossary + report insights ---------- */
 const TIPS = [
-  { term: "RSSI / Signal (dBm)", tip: "How strong your Wi-Fi is here. It's a negative number — closer to zero (−45) is stronger than −80." },
+  { term: "RSSI / Signal (dBm)", tip: "How strong your Wi-Fi is here. It's a negative number: closer to zero (−45) is stronger than −80." },
   { term: "SNR (Signal-to-Noise)", tip: "How clearly your device hears Wi-Fi over background static. Higher is better; low SNR means slow and flaky." },
   { term: "Channel", tip: "The lane your Wi-Fi uses. If neighbors crowd the same lane, everyone slows down." },
   { term: "Band (2.4 / 5 / 6 GHz)", tip: "2.4GHz reaches farther through walls; 5 and 6GHz are much faster but shorter-range." },
@@ -4913,7 +4913,7 @@ const TIPS = [
   { term: "Coverage heatmap", tip: "A color map of your Wi-Fi across the home, built from your readings. Warm = strong, cool = weak." },
   { term: "Property perimeter", tip: "The outline you draw around your home so the color map stays inside your walls, not the neighbors'." },
   { term: "AP / Router marker", tip: "A pin showing where your router or access point sits, so you can see if coverage lines up with it." },
-  { term: "Dead spot", tip: "A place with little or no usable Wi-Fi — a good spot for a booster or mesh unit." },
+  { term: "Dead spot", tip: "A place with little or no usable Wi-Fi, a good spot for a booster or mesh unit." },
   { term: "Co-channel interference", tip: "When your Wi-Fi and nearby networks share a channel and take turns, slowing everyone down." },
   { term: "SINR (cellular)", tip: "How clean your cell signal is over interference. Higher means faster, steadier phone-network internet." },
   { term: "RSRP (cellular)", tip: "How strong the cell tower signal is. Closer to zero (−80) is stronger than −110." },
@@ -4921,40 +4921,40 @@ const TIPS = [
   { term: "GPS accuracy", tip: "How precisely your phone knows its location, in meters. Smaller is more exact." },
   { term: "Multi-floor levels", tip: "Tabs for each story so basement, main floor, and upstairs each get their own coverage map." },
   { term: "Wi-Fi signal score", tip: "A 0–100 grade blending coverage, reliability, speed, interference, and cellular signal into one number." },
-  { term: "Survey type", tip: "In-house, Around the house, Property, or All — picks which tools you see so the screen stays simple. Switching never deletes your work." },
-  { term: "Aerial base map", tip: "A satellite image pulled from an address, used as the map you tap readings onto — no floor plan needed. Best for outdoor and property jobs." },
-  { term: "GPS walk & drop", tip: "Stream your phone's location to the Mac and drop a reading at your exact spot as you walk the property — no Google Earth Pro needed." },
+  { term: "Survey type", tip: "In-house, Around the house, Property, or All: picks which tools you see so the screen stays simple. Switching never deletes your work." },
+  { term: "Aerial base map", tip: "A satellite image pulled from an address, used as the map you tap readings onto. No floor plan needed. Best for outdoor and property jobs." },
+  { term: "GPS walk & drop", tip: "Stream your phone's location to the Mac and drop a reading at your exact spot as you walk the property. No Google Earth Pro needed." },
   { term: "Contour lines", tip: "Topographic-style lines on the heatmap, each marking one signal level (e.g. −67), so you can see exactly where 'Good' turns into 'Fair'." },
   { term: "KMZ / Google Earth export", tip: "Saves the coverage heatmap, every reading, your boundary and the routers as a .kmz that opens in Google Earth or goes to the client." },
-  { term: "CSV export", tip: "Every reading as a spreadsheet row — room, floor, band, channel, RSSI, SNR, rate, rating, GPS — for records or a client who wants raw numbers." },
+  { term: "CSV export", tip: "Every reading as a spreadsheet row: room, floor, band, channel, RSSI, SNR, rate, rating, GPS. For records or a client who wants raw numbers." },
   { term: "Speed test gauge", tip: "A one-tap needle sweep for download, upload, and responsiveness, measuring your real internet path with macOS's built-in tool." },
-  { term: "Mission Control", tip: "The home page — your whole survey on one screen: signal score, live vitals, a progress checklist, top findings, and the Generate Report button." },
-  { term: "Coverage target", tip: "Pick what a space is used for — Voice, Data, Video, High-density — and the map grades every spot pass/fail, showing the % of the area that meets it." },
+  { term: "Mission Control", tip: "The home page, your whole survey on one screen: signal score, live vitals, a progress checklist, top findings, and the Generate Report button." },
+  { term: "Coverage target", tip: "Pick what a space is used for (Voice, Data, Video, High-density) and the map grades every spot pass/fail, showing the % of the area that meets it." },
   { term: "Scale / square footage", tip: "Draw a known distance (a 10-ft wall) to teach the plan its real size, so coverage holes and areas report in actual square feet." },
-  { term: "Predict coverage", tip: "Model an access point's reach before you walk — drop APs on the plan and see the predicted heatmap in real feet, tuned for open, typical, or dense walls." },
-  { term: "Site plan", tip: "A plot plan of the whole property — the hand-drawn house placed inside the GPS-walked yard boundary, so you can show the house on its lot." },
-  { term: "Signal verdict (cellular)", tip: "A plain Excellent/Good/Fair/Poor grade for the gateway signal — the worse of coverage (RSRP) and quality (SINR), so a strong-but-noisy signal isn't called good." },
+  { term: "Predict coverage", tip: "Model an access point's reach before you walk. Drop APs on the plan and see the predicted heatmap in real feet, tuned for open, typical, or dense walls." },
+  { term: "Site plan", tip: "A plot plan of the whole property: the hand-drawn house placed inside the GPS-walked yard boundary, so you can show the house on its lot." },
+  { term: "Signal verdict (cellular)", tip: "A plain Excellent/Good/Fair/Poor grade for the gateway signal: the worse of coverage (RSRP) and quality (SINR), so a strong-but-noisy signal isn't called good." },
 ];
 const GUIDE_TOOLS = [
-  { name: "This app (survey → heatmap + report)", when: "Every job needing a coverage map or client report — the walk where you tap the floor plan. It's your deliverable.", not: "Not a live channel troubleshooter, not cellular, not security capture — diagnose the 'why' with WiFi Explorer." },
-  { name: "WiFi Explorer", when: "When you need to know WHY coverage is bad — channels in use, co-channel overlap, competing networks, SNR. Run it before retuning the router.", not: "Doesn't build heatmaps or a report — it describes the air where you stand, not coverage across the house." },
-  { name: "NetSpot", when: "A quick visual second-opinion heatmap on-site.", not: "Free tier CAN'T save or export — so it can't be your deliverable. Don't run the billable survey in it." },
-  { name: "Apple Wireless Diagnostics (built-in)", when: "The always-available fallback — a quick signal/noise/rate check or a packet capture.", not: "Coarse for channel planning and no report. Use it when nothing else is handy." },
-  { name: "T-Mobile gateway app", when: "ONLY the cellular side — aim the gateway / Waveform antenna by SINR & RSRP to find the best window or wall.", not: "Nothing to do with Wi-Fi coverage or the report. Aim the gateway, then survey Wi-Fi with this app." },
-  { name: "aircrack-ng", when: "Effectively never on this Mac — it's a security / monitor-mode suite, not a coverage tool.", not: "Not coverage, and it can't even capture here (the Alfa adapter has no Apple-Silicon driver). Skip it for surveys." },
+  { name: "This app (survey → heatmap + report)", when: "Every job needing a coverage map or client report: the walk where you tap the floor plan. It's your deliverable.", not: "Not a live channel troubleshooter, not cellular, not security capture. Diagnose the 'why' with WiFi Explorer." },
+  { name: "WiFi Explorer", when: "When you need to know WHY coverage is bad: channels in use, co-channel overlap, competing networks, SNR. Run it before retuning the router.", not: "Doesn't build heatmaps or a report. It describes the air where you stand, not coverage across the house." },
+  { name: "NetSpot", when: "A quick visual second-opinion heatmap on-site.", not: "Free tier CAN'T save or export, so it can't be your deliverable. Don't run the billable survey in it." },
+  { name: "Apple Wireless Diagnostics (built-in)", when: "The always-available fallback: a quick signal/noise/rate check or a packet capture.", not: "Coarse for channel planning and no report. Use it when nothing else is handy." },
+  { name: "T-Mobile gateway app", when: "ONLY the cellular side: aim the gateway / Waveform antenna by SINR & RSRP to find the best window or wall.", not: "Nothing to do with Wi-Fi coverage or the report. Aim the gateway, then survey Wi-Fi with this app." },
+  { name: "aircrack-ng", when: "Effectively never on this Mac: it's a security / monitor-mode suite, not a coverage tool.", not: "Not coverage, and it can't even capture here (the Alfa adapter has no Apple-Silicon driver). Skip it for surveys." },
 ];
 const GUIDE_FLOW = [
-  "<b>Start at Mission Control:</b> name the survey (client details on the Report page) — the home page tracks your progress and score as you go.",
+  "<b>Start at Mission Control:</b> name the survey (client details on the Report page). The home page tracks your progress and score as you go.",
   "<b>Get a base map:</b> on Coverage, draw a schematic, upload a floor plan or photo, auto-layout from a room list, or pull a satellite image from an address. Set a scale (🛠 Tools → Set scale) so everything reads in real square footage.",
   "<b>Map the property (optional):</b> on Site Plan, draw the house and walk the yard boundary by GPS to produce a plot plan of the whole lot.",
-  "<b>Aim the gateway (if cellular):</b> use the Cellular page to find the best SINR/RSRP spot — watch the Excellent/Good/Fair/Poor verdict — then survey the Wi-Fi it puts out.",
-  "<b>Survey:</b> walk and tap where you stand — indoors on the floor plan, outdoors by phone GPS. Pick a target (Voice / Data / Video) and watch % passing climb. The heatmap builds live.",
+  "<b>Aim the gateway (if cellular):</b> use the Cellular page to find the best SINR/RSRP spot, watch the Excellent/Good/Fair/Poor verdict, then survey the Wi-Fi it puts out.",
+  "<b>Survey:</b> walk and tap where you stand, indoors on the floor plan, outdoors by phone GPS. Pick a target (Voice / Data / Video) and watch % passing climb. The heatmap builds live.",
   "<b>Analyze:</b> switch metrics and colormaps, flip to Pass/Fail, turn on Contour lines, and use Predict coverage to model where to add access points before you walk.",
-  "<b>Deliver:</b> back on Mission Control (or Report), the 0–100 score + findings + infrastructure summary are ready — Generate Report → Save as PDF, and export .json / .csv / .kmz.",
+  "<b>Deliver:</b> back on Mission Control (or Report), the 0–100 score + findings + infrastructure summary are ready. Generate Report → Save as PDF, and export .json / .csv / .kmz.",
 ];
 const GUIDE_PAGES = [
-  { name: "Mission Control", desc: "Your home base — the whole survey at a glance. A 0–100 signal score, live vitals (rooms, best/worst, dead spots in ft², % passing, area), a progress checklist, top findings you can locate on the map, quick links to every tool, and the one-click Generate Report." },
-  { name: "Live", desc: "Stand somewhere and read the signal right now — a big live gauge plus a one-tap speed test (download / upload / responsiveness). Use it to hunt a dead spot or find the best router shelf." },
+  { name: "Mission Control", desc: "Your home base. The whole survey at a glance. A 0–100 signal score, live vitals (rooms, best/worst, dead spots in ft², % passing, area), a progress checklist, top findings you can locate on the map, quick links to every tool, and the one-click Generate Report." },
+  { name: "Live", desc: "Stand somewhere and read the signal right now: a big live gauge plus a one-tap speed test (download / upload / responsiveness). Use it to hunt a dead spot or find the best router shelf." },
   { name: "Coverage", desc: "The main survey. Build a base map, walk and tap where you stand, and the heatmap builds live. Pick a target (Voice/Data/Video) for a live % passing, set a scale for real square footage, add contour lines, and use Predict coverage to model APs before you walk. Tools are grouped under the 🛠 Tools menu." },
   { name: "Site Plan", desc: "A plot plan for the whole property. Draw the house footprint by hand, walk the yard boundary with your phone GPS (to real scale), then drop the house where it sits on the lot. House and property are separate objects you can place, rotate, and resize." },
   { name: "Cellular", desc: "Aim a home cellular gateway or antenna. Live bars plus RSRP / RSRQ / SINR with Excellent/Good/Fair/Poor grades and an overall verdict find the window or wall with the best tower signal. Aim this first, then survey the Wi-Fi." },
@@ -5065,7 +5065,7 @@ function setSiteMode(m) {
   ["yard", "house", "place"].forEach((k) => { const b = $("siteBtn-" + k); if (b) b.classList.toggle("on", k === m); });
   const hint = $("siteHint");
   if (hint) hint.textContent = m === "yard"
-    ? "Walk the property boundary — tap “＋ Corner at GPS” at each corner, or tap the plan to place corners by eye."
+    ? "Walk the property boundary. Tap “＋ Corner at GPS” at each corner, or tap the plan to place corners by eye."
     : m === "house"
     ? "Tap the corners of the house footprint to draw it. Tap all the way around."
     : "Drag the house to position it inside the property. Use the sliders to rotate and resize it.";
@@ -5075,7 +5075,7 @@ function setSiteMode(m) {
 }
 function siteCornerGps() {
   if (siteMode !== "yard") setSiteMode("yard");
-  if (!lastGpsFix || lastGpsFix.age_sec == null || lastGpsFix.age_sec > 25) return toast("No fresh GPS fix — connect your phone on the GPS page first");
+  if (!lastGpsFix || lastGpsFix.age_sec == null || lastGpsFix.age_sec > 25) return toast("No fresh GPS fix. Connect your phone on the GPS page first");
   sitePlan.yard.push({ lat: lastGpsFix.lat, lon: lastGpsFix.lon });
   saveSitePlan(); renderSitePlan();
   toast("Yard corner " + sitePlan.yard.length + " dropped");
@@ -5102,8 +5102,8 @@ function renderHome() {
     $("mcRing").style.setProperty("--rc", "var(--na)");
     $("mcRing").style.setProperty("--pct", 0);
     $("mcTitle").textContent = "Your survey at a glance";
-    $("mcSummary").textContent = "Capture a few readings and this hub fills in — signal score, coverage, dead spots, cellular, and your client report, all from one screen.";
-    $("mcFindings").innerHTML = '<p class="muted" style="font-size:13px">No findings yet — capture readings to populate.</p>';
+    $("mcSummary").textContent = "Capture a few readings and this hub fills in: signal score, coverage, dead spots, cellular, and your client report, all from one screen.";
+    $("mcFindings").innerHTML = '<p class="muted" style="font-size:13px">No findings yet. Capture readings to populate.</p>';
     return;
   }
   const ins = computeInsights(points, site, surveyEnv);

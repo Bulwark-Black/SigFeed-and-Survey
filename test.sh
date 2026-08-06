@@ -27,7 +27,7 @@ if [ $NET -eq 1 ]; then
   echo "→ live imagery sources (network)"
   python3 tests/imagery_test.py || fail=1
 else
-  echo "→ live imagery sources — skipped (run ./test.sh --net to include)"
+  echo "→ live imagery sources: skipped (run ./test.sh --net to include)"
 fi
 
 echo
