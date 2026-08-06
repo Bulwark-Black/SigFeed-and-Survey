@@ -1348,15 +1348,15 @@ function drawContours(ctx, W, H, mapped) {
   const gw = 100, gh = Math.max(1, Math.round(100 * ar));
   const grid = buildHeatValueGrid(mapped, gw, gh, null, ar);
   if (!grid) return;
-  const levels = contourLevels(grid);
-  if (!levels.length) return;
+  const bands = contourLevels(grid);
+  if (!bands.length) return;
   const sx = W / (gw - 1), sy = H / (gh - 1);
   const v = (x, y) => grid[y * gw + x];
   const f = (a, b, L) => (L - a) / (b - a);
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  levels.forEach((L, li) => {
+  bands.forEach((L, li) => {
     ctx.beginPath();
     const labels = [];
     for (let y = 0; y < gh - 1; y++) {
@@ -2384,7 +2384,6 @@ function mapToLatLonIn(geo, mapX, mapY) {
   const ny0 = mercWorldY(geo.north, z), ny = mercWorldY(geo.south, z) - ny0;
   return { lat: tile2lat(ny0 + mapY * ny, z), lon: tile2lon(wx + mapX * nx, z) };
 }
-function mapToLatLon(mapX, mapY) { return mapToLatLonIn(geoBounds, mapX, mapY); }
 
 // Live "you are here" dot on the aerial. Separate #youHere element inside #mapWrap
 // so renderCoverageMap()'s dotsLayer.innerHTML rebuild never wipes it. Shown only on
