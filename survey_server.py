@@ -716,34 +716,72 @@ def _merc_m(lat, lon):
     return x, y
 
 
+_PNG_CHANNELS = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
 def _png_is_blank(body):
     """True when a PNG is entirely transparent — NAIP's answer for 'no coverage here'.
 
     ArcGIS returns JPEG where the render is fully opaque and PNG where any of it is
     transparent, so a wholly-transparent PNG means the request fell outside NAIP (it is
-    CONUS-only). Every pixel being (0,0,0,0) makes the decompressed scanlines all-zero
-    whatever row filters the encoder chose, so this is exact rather than a size guess —
-    real imagery never decompresses to nothing but zeros.
+    CONUS-only). Getting this wrong is silent: a miss puts a blank base map under a client's
+    readings with no error anywhere.
+
+    Every scanline carries a leading filter-type byte, and that byte is NOT zero for filters
+    1-4. So testing the whole decompressed stream for zeros — which is what this used to do —
+    reports a genuinely blank image as real imagery the moment the encoder picks any filter but
+    None. Esri happens to emit filter 0 today, which is an undocumented tie-break in someone
+    else's encoder, not a contract.
+
+    Skipping the filter byte and testing the rest of the scanline is exact for this question,
+    with no predictor arithmetic: for an all-zero image every predictor reads only zeros, so
+    Filt(x) = 0 - 0 = 0 under all five filter types. And the converse holds — all-zero filtered
+    data reconstructs to an all-zero image whatever the filters were. So blank IFF the data
+    bytes are zero.
     """
-    if body[:4] != b"\x89PNG":
-        return False
-    idat = b""
-    i = 8
-    while i + 8 <= len(body):
-        ln = int.from_bytes(body[i:i + 4], "big")
-        tag = body[i + 4:i + 8]
-        if tag == b"IDAT":
-            idat += body[i + 8:i + 8 + ln]
-        elif tag == b"IEND":
-            break
-        i += 12 + ln
-    if not idat:
-        return False
     try:
-        raw = zlib.decompress(idat)
-    except zlib.error:
+        if body[:8] != b"\x89PNG\r\n\x1a\n":
+            return False
+        n = len(body)
+        i, ihdr, idat = 8, None, b""
+        while i + 12 <= n:
+            ln = int.from_bytes(body[i:i + 4], "big")
+            if ln > 0x7FFFFFFF or i + 12 + ln > n:      # bogus length: refuse, don't walk off
+                return False
+            tag = body[i + 4:i + 8]
+            if tag == b"IHDR":
+                if ln != 13:
+                    return False
+                ihdr = body[i + 8:i + 21]
+            elif tag == b"IDAT":
+                if ihdr is None:
+                    return False
+                idat += body[i + 8:i + 8 + ln]
+            elif tag == b"IEND":
+                break
+            i += 12 + ln
+        if ihdr is None or not idat:
+            return False
+
+        w = int.from_bytes(ihdr[0:4], "big")
+        h = int.from_bytes(ihdr[4:8], "big")
+        depth, ctype, comp, fmethod, interlace = ihdr[8], ihdr[9], ihdr[10], ihdr[11], ihdr[12]
+        # Anything exotic is somebody else's image, not a NAIP no-coverage render. Say "not
+        # blank" rather than guess — that direction only ever keeps real imagery.
+        if comp or fmethod or interlace:
+            return False
+        if ctype not in (4, 6) or depth not in (8, 16):   # must carry an alpha channel
+            return False
+        if not (0 < w <= 65536 and 0 < h <= 65536):
+            return False
+
+        stride = w * _PNG_CHANNELS[ctype] * (depth // 8)
+        raw = zlib.decompress(idat, bufsize=min((stride + 1) * h + 64, 1 << 26))
+        if len(raw) != (stride + 1) * h:
+            return False
+        return all(not any(raw[r * (stride + 1) + 1:(r + 1) * (stride + 1)]) for r in range(h))
+    except (zlib.error, IndexError, ValueError, MemoryError):
         return False
-    return not any(raw)
 
 
 def action_naip(west, east, north, south, size):
@@ -1282,9 +1320,14 @@ class Handler(BaseHTTPRequestHandler):
         hardcoded http://127.0.0.1 href from this same machine.
         """
         try:
-            return ipaddress.ip_address(self.client_address[0]).is_loopback
+            ip = ipaddress.ip_address(self.client_address[0])
         except (ValueError, IndexError):
             return False
+        # ::ffff:127.0.0.1 is loopback in substance, and older Pythons say it isn't. The server
+        # is AF_INET today so this cannot arise, but the failure it would cause — Google Earth
+        # silently locked out of the live feed — is worth one line to rule out for good.
+        mapped = getattr(ip, "ipv4_mapped", None)
+        return bool(ip.is_loopback or (mapped is not None and mapped.is_loopback))
 
     def _guard(self, path, query, need_json=False):
         """Common checks for /api/*. Returns True when the request may proceed."""

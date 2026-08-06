@@ -37,17 +37,53 @@ def section(name):
     print("  " + name)
 
 
-def png(w, h, rgba, bitdepth=8, color=6):
-    raw = b"".join(b"\x00" + bytes(rgba) * w for _ in range(h))
+def _chunk(t, d):
+    c = t + d
+    return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
 
-    def chunk(t, d):
-        c = t + d
-        return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xFFFFFFFF)
 
+_CH = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+
+
+def png(w, h, px, bitdepth=8, color=6, filters=(0,), interlace=0):
+    """Build a PNG with a chosen row filter. The filter matters: a blank image encoded with
+    filter 1-4 has NONZERO filter bytes, which is exactly what the old all-bytes-zero check
+    missed. Tests that only ever use filter 0 cannot see that bug."""
+    ch = _CH[color]
+    bpp = ch * (bitdepth // 8)
+    stride = w * bpp
+    rows = []
+    for y in range(h):
+        f = filters[y % len(filters)]
+        line = (bytes(px) * w) if bitdepth == 8 else (b"".join(struct.pack(">H", v) for v in px) * w)
+        if f == 0:
+            data = line
+        else:
+            prev = bytes(stride)
+            out = bytearray()
+            for x in range(stride):
+                orig = line[x]
+                oa = line[x - bpp] if x >= bpp else 0
+                ob = prev[x]
+                oc = prev[x - bpp] if x >= bpp else 0
+                if f == 1:
+                    v = (orig - oa) & 0xFF
+                elif f == 2:
+                    v = (orig - ob) & 0xFF
+                elif f == 3:
+                    v = (orig - ((oa + ob) >> 1)) & 0xFF
+                else:
+                    pp = oa + ob - oc
+                    pa, pb, pc = abs(pp - oa), abs(pp - ob), abs(pp - oc)
+                    pred = oa if (pa <= pb and pa <= pc) else (ob if pb <= pc else oc)
+                    v = (orig - pred) & 0xFF
+                out.append(v)
+            data = bytes(out)
+        rows.append(bytes([f]) + data)
     return (b"\x89PNG\r\n\x1a\n"
-            + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, bitdepth, color, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(raw))
-            + chunk(b"IEND", b""))
+            + _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, bitdepth, color, 0, 0, interlace))
+            + _chunk(b"IDAT", zlib.compress(b"".join(rows)))
+            + _chunk(b"IEND", b""))
 
 
 # --------------------------------------------------------------------------
@@ -65,6 +101,24 @@ ok(not srv._png_is_blank(bogus), "absurd chunk length does not hang or crash")
 # a partially-covered tile has real data and must be kept
 half = png(32, 32, [0, 0, 0, 0])
 ok(srv._png_is_blank(half), "all-transparent at another size is still blank")
+
+# THE regression: filter bytes are nonzero for filters 1-4, so a whole-stream zero test called a
+# genuinely blank render "real imagery" and put a blank base map under a client's readings.
+for _f in range(5):
+    ok(srv._png_is_blank(png(16, 16, [0, 0, 0, 0], filters=(_f,))),
+       "blank RGBA with row filter %d is detected" % _f)
+    ok(not srv._png_is_blank(png(16, 16, [12, 200, 40, 255], filters=(_f,))),
+       "real imagery with row filter %d is not called blank" % _f)
+ok(srv._png_is_blank(png(16, 16, [0, 0, 0, 0], filters=(0, 1, 2, 3, 4))),
+   "blank with mixed filters across rows")
+ok(srv._png_is_blank(png(8, 8, [0, 0], color=4, filters=(3,))), "blank greyscale+alpha")
+ok(srv._png_is_blank(png(8, 8, [0, 0, 0, 0], bitdepth=16, filters=(4,))), "blank 16-bit RGBA")
+ok(not srv._png_is_blank(png(16, 16, [0, 0, 0, 1], filters=(1,))),
+   "alpha=1 is nearly invisible but NOT blank")
+ok(not srv._png_is_blank(png(16, 16, [0, 0, 0, 0], interlace=1)),
+   "interlaced is refused rather than guessed at")
+ok(not srv._png_is_blank(png(16, 16, [0, 0, 0], color=2)),
+   "a PNG with no alpha channel is never blank")
 
 # --------------------------------------------------------------------------
 section("action_naip — input validation (no network on the reject paths)")
@@ -234,6 +288,10 @@ ok(not srv.Handler._loopback_client(type("S", (), {"client_address": ("8.8.8.8",
    "a public address does not")
 ok(not srv.Handler._loopback_client(type("S", (), {"client_address": ("garbage", 1)})()),
    "an unparseable address does not")
+ok(srv.Handler._loopback_client(type("S", (), {"client_address": ("::ffff:127.0.0.1", 1)})()),
+   "IPv4-mapped loopback counts (it is loopback in substance; older Pythons disagree)")
+ok(not srv.Handler._loopback_client(type("S", (), {"client_address": ("::ffff:192.168.1.9", 1)})()),
+   "IPv4-mapped LAN address still does not")
 
 # and the gate is actually wired into the routes, not merely defined
 _real_lb = srv.Handler._loopback_client
