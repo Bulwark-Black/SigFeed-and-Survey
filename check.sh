@@ -8,21 +8,45 @@
 cd "$(dirname "$0")" || exit 1
 fail=0
 
-echo "→ app.js syntax"
+echo "→ js module syntax"
 if command -v node >/dev/null 2>&1; then
-  node --check app.js && echo "  ok" || fail=1
+  bad=0
+  for f in js/*.js; do node --check "$f" || bad=1; done
+  [ $bad -eq 0 ] && echo "  ok ($(ls js/*.js | wc -l | tr -d " ") modules)" || fail=1
 else
   echo "  (node not installed, skipped)"
+fi
+
+echo "→ js module graph resolves (every import has a matching export)"
+if command -v node >/dev/null 2>&1; then
+  python3 - <<'PYEOF' || fail=1
+import re, os, sys
+exports, imports = {}, []
+for f in sorted(os.listdir("js")):
+    if not f.endswith(".js"): continue
+    s = open("js/" + f, encoding="utf-8").read()
+    ex = set()
+    for m in re.finditer(r'export \{([^}]*)\}', s, re.S):
+        ex |= {x.strip() for x in m.group(1).split(",") if x.strip()}
+    exports[f[:-3]] = ex
+    for m in re.finditer(r'import \{([^}]*)\} from "\./(\w+)\.js"', s, re.S):
+        for n in (x.strip() for x in m.group(1).split(",")):
+            if n: imports.append((f[:-3], m.group(2), n))
+missing = [(a, b, n) for a, b, n in imports if n not in exports.get(b, set())]
+print("  MISSING: " + ", ".join("%s wants %s from %s" % (a, n, b) for a, b, n in missing)
+      if missing else "  ok (%d imports checked)" % len(imports))
+sys.exit(1 if missing else 0)
+PYEOF
 fi
 
 echo "→ survey_server.py syntax"
 if python3 -m py_compile survey_server.py; then echo "  ok"; else fail=1; fi
 rm -rf __pycache__
 
-echo "→ DOM ids referenced by app.js but missing from the HTML"
+echo "→ DOM ids referenced by the js modules but missing from the HTML"
 python3 - <<'PY' || fail=1
-import re, sys
-js = open("app.js").read()
+import re, sys, os
+js = "".join(open("js/"+f).read() for f in sorted(os.listdir("js")) if f.endswith(".js"))
 html = open("dashboard.html").read() + open("run-sheet.html").read()
 have  = set(re.findall(r'id="([^"]+)"', html))
 have |= set(re.findall(r'''\.id\s*=\s*["']([A-Za-z0-9_-]+)''', js))  # created at runtime
@@ -35,8 +59,8 @@ PY
 
 echo "→ inline handlers pointing at functions that don't exist"
 python3 - <<'PY' || fail=1
-import re, sys
-js   = open("app.js").read()
+import re, sys, os
+js   = "".join(open("js/"+f).read() for f in sorted(os.listdir("js")) if f.endswith(".js"))
 html = open("dashboard.html").read()
 defined  = set(re.findall(r'function\s+([A-Za-z0-9_$]+)', js))
 defined |= set(re.findall(r'(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:function|\()', js))
@@ -54,9 +78,9 @@ PY
 
 echo "→ CSS classes styled but never referenced"
 python3 - <<'PY'
-import re
+import re, os
 html = open("dashboard.html").read()
-style, body = html.split("</style>")[0], html.split("</style>")[1] + open("app.js").read()
+style, body = html.split("</style>")[0], html.split("</style>")[1] + "".join(open("js/"+f).read() for f in sorted(os.listdir("js")) if f.endswith(".js"))
 styled = set(re.findall(r'\.([a-z][a-z0-9-]{2,})(?=[\s,{:.\[])', style))
 # every token that appears in any class="..." / classList call / template literal
 used = set()

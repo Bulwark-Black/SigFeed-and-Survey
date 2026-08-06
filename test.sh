@@ -11,13 +11,13 @@ fail=0
 NET=0
 [ "$1" = "--net" ] && NET=1
 
-echo "→ coordinate maths (app.js)"
+echo "→ coordinate maths"
 node tests/geo.test.js || fail=1
 
-echo "→ KMZ writer (app.js)"
+echo "→ KMZ writer"
 node tests/kmz.test.js || fail=1
 
-echo "→ KML/KMZ export contents (app.js)"
+echo "→ KML/KMZ export contents"
 node tests/export.test.js || fail=1
 
 echo "→ server logic (survey_server.py)"

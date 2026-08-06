@@ -1,16 +1,27 @@
-// Pull named functions straight out of app.js and evaluate them, so the tests exercise the
-// SHIPPED source rather than a copy that can quietly drift out of step with it.
 const fs = require("fs");
 const path = require("path");
 
-const SRC = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+// The app is a set of ES modules under js/. These tests pull individual functions out by name
+// and evaluate them, rather than importing, so that a function only ever exported because a test
+// wanted it does not quietly widen a module's public surface. Import and export lines are
+// stripped: what is under test is the function body, not the module wiring (check.sh verifies
+// that the import graph resolves).
+const JS_DIR = path.join(__dirname, "..", "js");
+const SRC = fs.readdirSync(JS_DIR)
+  .filter((f) => f.endsWith(".js"))
+  .sort()
+  .map((f) => fs.readFileSync(path.join(JS_DIR, f), "utf8"))
+  .join("\n")
+  .split("\n")
+  .filter((l) => !/^\s*(import\s|export\s*\{)/.test(l))
+  .join("\n");
 
 // Brace-balanced extraction. Good enough because every target is a top-level declaration and
 // none of them contain a brace inside a string or regex literal.
 function grab(name) {
   const decl = "function " + name + "(";
   const i = SRC.indexOf(decl);
-  if (i < 0) throw new Error("app.js has no function named " + name);
+  if (i < 0) throw new Error("no js module declares a function named " + name);
   let depth = 0, started = false;
   for (let j = i; j < SRC.length; j++) {
     const c = SRC[j];
@@ -24,7 +35,7 @@ function grab(name) {
 // these consts are IIFEs whose bodies contain semicolons of their own.
 function grabConst(name) {
   const m = SRC.match(new RegExp("^const\\s+" + name + "\\s*=", "m"));
-  if (!m) throw new Error("app.js has no const named " + name);
+  if (!m) throw new Error("no js module declares a const named " + name);
   const start = m.index;
   let depth = 0;
   for (let j = start; j < SRC.length; j++) {
