@@ -1,7 +1,7 @@
 // Live signal page: polling, capturing readings, the speed test, summary strip.
 
 import { GRADE_COLOR, cellVerdict, removeHeatmap, renderCellSpots, renderReportPhotos, saveCellPoints, savePhotos } from "./cellular.js";
-import { api, rate, store, toast, updateGauge } from "./core.js";
+import { api, rate, store, toast, updateGauge, updateSideStatus } from "./core.js";
 import { savePoints } from "./gps.js";
 import { REQ_PROFILES, getScale, holeAreaSqft, mappedPoints, renderCoverageMap, requirementStats, surveyedSqft, unplacedPoints } from "./heatmap.js";
 import { renderReportInsights } from "./pages.js";
@@ -39,6 +39,7 @@ async function poll() {
     }
     renderAdvLive(d);
     renderNearby(d.nearby, c);
+    updateSideStatus();   // the sidebar pills track the live scan, not just saved readings
   } catch (e) {
     $("easyStatusText").textContent = "Backend offline. Is the server running?";
     $("gaugeWord").textContent = "—";
@@ -324,12 +325,6 @@ function renderSummary() {
   $("sumCell").style.color = verdict ? GRADE_COLOR[verdict] : connected ? "var(--exc)" : "var(--faint)";
   $("sumCellDot").style.background = verdict ? GRADE_COLOR[verdict] : connected ? "var(--exc)" : "var(--na)";
   updateSideStatus();
-}
-function updateSideStatus() {
-  const c = lastScan && lastScan.current;
-  if ($("ssWifi")) { $("ssWifi").textContent = c ? "Wi-Fi · " + (c.ssid || "connected") : "Wi-Fi · none"; $("ssWifiDot").style.background = c ? "var(--exc)" : "var(--na)"; }
-  const on = lastGpsFix && lastGpsFix.lat != null;
-  if ($("ssGps")) { $("ssGps").textContent = on ? "GPS · live" : "GPS off"; $("ssGpsDot").style.background = on ? "var(--exc)" : "var(--na)"; }
 }
 function setSum(which, val, color, sub) {
   const ids = which === "Best" ? ["sumBest", "sumBestDot", "sumBestRoom"] : ["sumWorst", "sumWorstDot", "sumWorstRoom"];

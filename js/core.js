@@ -5,7 +5,7 @@ import { stopCellAuto } from "./cellular.js";
 import { startGpsPoll, stopGpsPoll } from "./gps.js";
 import { renderCoverageMap } from "./heatmap.js";
 import { PAGE_TITLES, renderGuide, renderHome, renderReportInsights, setSiteMode } from "./pages.js";
-import { $, LS_PAGE, geoBounds, set, siteMode, speedMax } from "./state.js";
+import { $, LS_PAGE, geoBounds, lastGpsFix, lastScan, set, siteMode, speedMax } from "./state.js";
 /* ---------- ratings ---------- */
 function rate(signal, snr) {
   if (signal == null) return { label: "—", cls: "na", word: "—", color: "#7c8aa6" };   // = --na
@@ -334,5 +334,15 @@ function showPage(name) {
   }
 }
 
+// The sidebar Wi-Fi/GPS pills. Lives here rather than with the live page because both the
+// Wi-Fi poll and the GPS poll have to refresh it, and core is already below both of them.
+function updateSideStatus() {
+  const c = lastScan && lastScan.current;
+  if ($("ssWifi")) { $("ssWifi").textContent = c ? "Wi-Fi · " + (c.ssid || "connected") : "Wi-Fi · none"; $("ssWifiDot").style.background = c ? "var(--exc)" : "var(--na)"; }
+  const on = lastGpsFix && lastGpsFix.lat != null;
+  if ($("ssGps")) { $("ssGps").textContent = on ? "GPS · live" : "GPS off"; $("ssGpsDot").style.background = on ? "var(--exc)" : "var(--na)"; }
+}
+
 export { API_KEY,LIVE_TOKEN,api,apiUrl,buildSpeedTicks,buildSpeedZones,buildZones,rate,
-  renderStorageBar,runSpeedTest,showPage,store,toast,updateGauge,updateSpeedGauge,warn };
+  renderStorageBar,runSpeedTest,showPage,store,toast,updateGauge,updateSideStatus,
+  updateSpeedGauge,warn };

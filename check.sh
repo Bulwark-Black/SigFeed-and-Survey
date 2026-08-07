@@ -39,6 +39,56 @@ sys.exit(1 if missing else 0)
 PYEOF
 fi
 
+echo "→ js modules using a shared name they never imported"
+python3 - <<'PYEOF' || fail=1
+import re, os, sys
+# Moving a function between modules without its dependencies leaves a free variable. Module
+# scope is strict, so it throws at runtime, and a caller's own try/catch can swallow it into a
+# misleading message. Nothing else here catches that: the import graph resolves fine.
+def blank(src):
+    out = list(src); i = 0; n = len(src)
+    while i < n:
+        c = src[i]
+        if c == "/" and i+1 < n and src[i+1] == "/":
+            j = src.find("\n", i); j = n if j < 0 else j
+            for k in range(i, j): out[k] = " "
+            i = j; continue
+        if c == "/" and i+1 < n and src[i+1] == "*":
+            j = src.find("*/", i+2); j = n if j < 0 else j+2
+            for k in range(i, j):
+                if src[k] != "\n": out[k] = " "
+            i = j; continue
+        if c in "\"'`":
+            q = c; j = i+1
+            while j < n:
+                if src[j] == "\\": j += 2; continue
+                if src[j] == q: j += 1; break
+                if src[j] != "\n": out[j] = " "
+                j += 1
+            i = j; continue
+        i += 1
+    return "".join(out)
+
+state = open("js/state.js").read()
+m = re.search(r"export \{([^}]*)\};\s*$", state, re.S)
+shared = {x.strip() for x in m.group(1).split(",") if x.strip()}
+bad = []
+for f in sorted(os.listdir("js")):
+    if not f.endswith(".js") or f == "state.js": continue
+    src = open("js/" + f).read(); b = blank(src)
+    imported = set()
+    for im in re.finditer(r"import \{([^}]*)\} from", src, re.S):
+        imported |= {x.strip() for x in im.group(1).split(",") if x.strip()}
+    declared = set(re.findall(r"^(?:async\s+)?(?:function|const|let|var)\s+([A-Za-z0-9_$]+)", src, re.M))
+    declared |= set(re.findall(r"(?:^|[;{(\s])(?:let|const|var)\s+([A-Za-z0-9_$]+)", b))
+    for n in shared:
+        if n in imported or n in declared: continue
+        if re.search(r"(?<![.\w$])" + re.escape(n) + r"(?![\w$])", b):
+            bad.append("%s uses %s" % (f, n))
+print("  MISSING: " + ", ".join(bad) if bad else "  ok (%d shared names checked)" % len(shared))
+sys.exit(1 if bad else 0)
+PYEOF
+
 echo "→ survey_server.py syntax"
 if python3 -m py_compile survey_server.py; then echo "  ok"; else fail=1; fi
 rm -rf __pycache__
