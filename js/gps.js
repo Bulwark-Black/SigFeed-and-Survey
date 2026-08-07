@@ -2,7 +2,7 @@
 
 import { renderYouAreHere } from "./basemap.js";
 import { renderCellSpots, renderHeatmapThumb, renderReportPhotos, saveCellPoints, savePhotos } from "./cellular.js";
-import { api, rate, showPage, store, toast } from "./core.js";
+import { api, rate, showPage, store, toast, updateSideStatus } from "./core.js";
 import { scheduleLivePush } from "./earth.js";
 import { renderCoverageMap } from "./heatmap.js";
 import { renderPoints } from "./live.js";
@@ -68,6 +68,8 @@ async function refreshGps() {
     renderYouAreHere();
     return null;
   }
+  // every exit path, so losing a fix puts the pill back to off rather than leaving it live
+  updateSideStatus();
 }
 
 // Start/stop the lightweight 3s poll. Called by showPage() when the GPS page shows/hides.
