@@ -1,4 +1,7 @@
-"""Small shared primitives: subprocess and HTTP calls, and a constant-time secret compare."""
+"""Small shared primitives: subprocess and HTTP calls.
+
+The constant-time secret compare lives in live.py, next to the token it guards.
+"""
 
 import json
 import subprocess

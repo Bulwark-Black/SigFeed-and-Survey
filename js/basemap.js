@@ -377,8 +377,13 @@ async function zoomAerial(delta) {
 }
 
 /* ---------- USDA NAIP base map ---------- */
-// Public-domain, orthorectified, and it carries a real capture date. Uses the SAME
-// aerialBounds() box as the Esri path, so it's a drop-in — including −／＋ zoom.
+// Public-domain and orthorectified. Georeferenced by construction: the export is requested for
+// exactly the aerialBounds() box we ask for, so unlike the Earth path there is nothing to fit and
+// no residual to measure. Same box as the Esri path, so it's a drop-in — including −／＋ zoom.
+//
+// No capture date. An earlier version of this comment claimed one, and the README repeated it:
+// the request is f=image, which returns pixels and no metadata, so nothing here knows when the
+// imagery was flown. Don't reintroduce the claim without also fetching it.
 //
 // Flown leaf-on, May to September, so on a wooded parcel the canopy can hide a driveway or an
 // outbuilding that winter imagery would show. That's why it's a choice, not a replacement.
