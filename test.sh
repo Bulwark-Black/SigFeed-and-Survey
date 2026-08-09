@@ -20,6 +20,9 @@ node tests/kmz.test.js || fail=1
 echo "→ KML/KMZ export contents"
 node tests/export.test.js || fail=1
 
+echo "→ imagery credit and stated tolerance"
+node tests/credit.test.js || fail=1
+
 echo "→ server logic (survey_server.py)"
 python3 tests/server_test.py || fail=1
 

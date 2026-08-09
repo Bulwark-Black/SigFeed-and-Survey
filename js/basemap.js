@@ -164,7 +164,7 @@ async function captureFromEarth(lat, lon, spanM) {
       return false;
     }
     toast(accFt <= EARTH_ACC_EXACT_FT
-      ? "📷 Base map captured. Positions are accurate to under 5 ft."
+      ? `📷 Base map captured. Positions are accurate to under ${EARTH_ACC_EXACT_FT} ft.`
       : `📷 Base map captured. Positions accurate to about ${Math.round(accFt)} ft.`);
     return true;
   } catch (e) {
@@ -470,8 +470,12 @@ function baseMapCredit() {
       const a = l.aerial.accuracy;
       if (!a) return;
       const ft = Math.round(mToFt(a.worst_m));
-      bits.push(`<b>${esc(l.name)}</b>: positions on this base map are accurate to about ` +
-        `${ft <= EARTH_ACC_EXACT_FT ? "under " + EARTH_ACC_EXACT_FT : ft} ft` +
+      // "accurate to about under 5 ft" is what gluing "about" to "under" produces. Below the
+      // threshold the honest phrasing is a bound, not an estimate, so the whole clause switches.
+      const tol = ft <= EARTH_ACC_EXACT_FT
+        ? `accurate to under ${EARTH_ACC_EXACT_FT} ft`
+        : `accurate to about ${ft} ft`;
+      bits.push(`<b>${esc(l.name)}</b>: positions on this base map are ${tol}` +
         (a.relief_m > 5 ? `, measured across ${Math.round(mToFt(a.relief_m))} ft of ground and ` +
           `tree height in view. Readings beside tall trees or buildings near the edge of the ` +
           `picture are the least certain` : "") +
