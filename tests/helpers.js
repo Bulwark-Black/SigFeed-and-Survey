@@ -6,6 +6,17 @@ const path = require("path");
 // wanted it does not quietly widen a module's public surface. Import and export lines are
 // stripped: what is under test is the function body, not the module wiring (check.sh verifies
 // that the import graph resolves).
+// import/export statements wrap across lines, so dropping only the line that STARTS one leaves
+// its continuation behind and SRC stops being parseable JavaScript. Track the statement instead.
+function wiringFilter() {
+  let inWiring = false;
+  return (l) => {
+    if (!inWiring && !/^\s*(import\s|export\s*\{)/.test(l)) return true;
+    inWiring = !/;\s*$/.test(l);      // a wiring statement runs until its semicolon
+    return false;
+  };
+}
+
 const JS_DIR = path.join(__dirname, "..", "js");
 const SRC = fs.readdirSync(JS_DIR)
   .filter((f) => f.endsWith(".js"))
@@ -13,7 +24,7 @@ const SRC = fs.readdirSync(JS_DIR)
   .map((f) => fs.readFileSync(path.join(JS_DIR, f), "utf8"))
   .join("\n")
   .split("\n")
-  .filter((l) => !/^\s*(import\s|export\s*\{)/.test(l))
+  .filter(wiringFilter())
   .join("\n");
 
 // Brace-balanced extraction. Good enough because every target is a top-level declaration and

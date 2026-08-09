@@ -67,9 +67,12 @@ async function refreshGps() {
     setGpsBadge("wait", "Backend offline", "Is the survey server still running?");
     renderYouAreHere();
     return null;
+  } finally {
+    // finally, not a trailing statement: all three paths above return, so a line after the
+    // try/catch never runs. The pill has to update whether a fix arrived, went away, or the
+    // backend dropped, so losing a fix puts it back to off instead of leaving it reading live.
+    updateSideStatus();
   }
-  // every exit path, so losing a fix puts the pill back to off rather than leaving it live
-  updateSideStatus();
 }
 
 // Start/stop the lightweight 3s poll. Called by showPage() when the GPS page shows/hides.

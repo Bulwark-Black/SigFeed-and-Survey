@@ -71,9 +71,18 @@ let speedMax = 500; // current dial full-scale (Mbps); auto-scaled per run via n
 // These are the module-level values more than one area of the app both reads and writes.
 // Reads stay plain (`points`), writes go through `set` (`set.points(...)`).
 //
-// The asymmetry is deliberate and it is what makes splitting this file safe: once these live
-// in their own module, an imported binding can be read but never assigned, so any write that
-// was missed is a hard parse error rather than a value that silently stops propagating.
+// The asymmetry is deliberate: it gives every write to shared state one greppable shape, so a
+// write that bypasses it can be found statically.
+//
+// It is NOT self-enforcing, and an earlier version of this comment claimed it was. An imported
+// binding is read-only, but `points = x` in an importing module still PARSES; V8 raises
+// TypeError only on the line that runs. Most of this code writes state inside a try/catch
+// (poll, refreshGps, loadState, every localStorage access), so a missed write does not surface
+// as an error at all: poll()'s catch turns one into "Backend offline. Is the server running?"
+// against a perfectly healthy server, with nothing logged.
+//
+// check.sh is what actually enforces it, by flagging any assignment to an imported binding.
+// Without that check this convention is a convention, not a guarantee.
 const set = {
   points: (v) => { points = v; },
   levels: (v) => { levels = v; },

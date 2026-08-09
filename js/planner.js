@@ -870,11 +870,11 @@ function generateSchematicDataURL() {
 }
 
 export { addLevel,addPolyVertex,addRoom,applyCalibration,applyLevelMap,cancelCalibration,
-  cancelShapeRoom,chooseSurveyType,clearAPs,clearPerimeter,clearPredictAPs,closeDrops,
-  commitLevelName,convertToShape,cornerAtGps,curLevel,deleteLevel,deletePolyVertex,deleteRoom,
-  finishShapeRoom,fmtSqft,generateAutoLayout,generateMapDataURL,initLevels,persistPredict,
-  renameLevel,renameRoom,renderLevelTabs,renderRooms,resetPlan,roomPointerDown,roomVertexDown,
-  saveLevelMap,saveLevels,selectMode,setCalStep,setMapMode,setPredictEnv,startSchematic,
-  switchLevel,toggleAP,toggleAerialBox,toggleAutoLayout,toggleCalibrate,toggleContours,
-  toggleDrop,toggleHeatmap,togglePerimeter,togglePixelate,togglePredict,toggleShapeRoom,undoAP,
-  undoMapPoint,undoPerimeter,undoPredictAP,undoShapeVert,updateScaleUI };
+  cancelLevelName,cancelShapeRoom,chooseSurveyType,clearAPs,clearPerimeter,clearPredictAPs,
+  closeDrops,commitLevelName,convertToShape,cornerAtGps,curLevel,deleteLevel,deletePolyVertex,
+  deleteRoom,finishShapeRoom,fmtSqft,generateAutoLayout,generateMapDataURL,initLevels,
+  persistPredict,renameLevel,renameRoom,renderLevelTabs,renderRooms,resetPlan,roomPointerDown,
+  roomVertexDown,saveLevelMap,saveLevels,selectMode,setCalStep,setMapMode,setPredictEnv,
+  startSchematic,switchLevel,toggleAP,toggleAerialBox,toggleAutoLayout,toggleCalibrate,
+  toggleContours,toggleDrop,toggleHeatmap,togglePerimeter,togglePixelate,togglePredict,
+  toggleShapeRoom,undoAP,undoMapPoint,undoPerimeter,undoPredictAP,undoShapeVert,updateScaleUI };

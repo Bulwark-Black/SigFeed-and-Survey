@@ -21,14 +21,14 @@ import { captureAdv, clearAll, delPoint, launch, poll, runCellSpeed, runPing, ru
   startPlacing } from "./live.js";
 import { onSitePointerDown, onSitePointerMove, onSitePointerUp, onSiteTap, renderSitePlan, 
   setSiteMode, setSiteRot, setSiteScale, siteClear, siteCornerGps, siteUndo } from "./pages.js";
-import { addLevel, addPolyVertex, addRoom, applyCalibration, cancelCalibration, cancelShapeRoom, 
-  chooseSurveyType, clearAPs, clearPerimeter, clearPredictAPs, closeDrops, commitLevelName, 
-  convertToShape, cornerAtGps, deleteLevel, deletePolyVertex, deleteRoom, finishShapeRoom, 
-  generateAutoLayout, renameLevel, renameRoom, renderRooms, resetPlan, roomPointerDown, 
-  roomVertexDown, selectMode, setMapMode, setPredictEnv, startSchematic, switchLevel, toggleAP, 
-  toggleAerialBox, toggleAutoLayout, toggleCalibrate, toggleContours, toggleDrop, toggleHeatmap, 
-  togglePerimeter, togglePixelate, togglePredict, toggleShapeRoom, undoAP, undoMapPoint, 
-  undoPerimeter, undoPredictAP, undoShapeVert } from "./planner.js";
+import { addLevel, addPolyVertex, addRoom, applyCalibration, cancelCalibration, cancelLevelName, 
+  cancelShapeRoom, chooseSurveyType, clearAPs, clearPerimeter, clearPredictAPs, closeDrops, 
+  commitLevelName, convertToShape, cornerAtGps, deleteLevel, deletePolyVertex, deleteRoom, 
+  finishShapeRoom, generateAutoLayout, renameLevel, renameRoom, renderRooms, resetPlan, 
+  roomPointerDown, roomVertexDown, selectMode, setMapMode, setPredictEnv, startSchematic, 
+  switchLevel, toggleAP, toggleAerialBox, toggleAutoLayout, toggleCalibrate, toggleContours, 
+  toggleDrop, toggleHeatmap, togglePerimeter, togglePixelate, togglePredict, toggleShapeRoom, 
+  undoAP, undoMapPoint, undoPerimeter, undoPredictAP, undoShapeVert } from "./planner.js";
 import { genReport } from "./report.js";
 import { $, LS_PAGE, PROFILE_PREFIX, activeProfile, speedMax } from "./state.js";
 
@@ -56,7 +56,8 @@ Object.assign(window, {
   // pages
   onSiteTap, setSiteMode, setSiteRot, setSiteScale, siteClear, siteCornerGps, siteUndo,
   // planner
-  addLevel, addPolyVertex, addRoom, applyCalibration, cancelCalibration, cancelShapeRoom,
+  addLevel, addPolyVertex, addRoom, applyCalibration, cancelCalibration, cancelLevelName,
+  cancelShapeRoom,
   chooseSurveyType, clearAPs, clearPerimeter, clearPredictAPs, closeDrops, commitLevelName,
   convertToShape, cornerAtGps, deleteLevel, deletePolyVertex, deleteRoom, finishShapeRoom,
   generateAutoLayout, renameLevel, renameRoom, renderRooms, resetPlan, roomPointerDown,

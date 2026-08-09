@@ -39,12 +39,21 @@ sys.exit(1 if missing else 0)
 PYEOF
 fi
 
-echo "→ js modules using a shared name they never imported"
+echo "→ js modules using a shared name they never imported, or assigning to an imported one"
 python3 - <<'PYEOF' || fail=1
 import re, os, sys
+# Two ways a module can name something it cannot actually use, both invisible to node --check.
+#
 # Moving a function between modules without its dependencies leaves a free variable. Module
 # scope is strict, so it throws at runtime, and a caller's own try/catch can swallow it into a
 # misleading message. Nothing else here catches that: the import graph resolves fine.
+#
+# And an imported binding is read-only. `points = x` in an importing module parses cleanly and
+# throws TypeError only on the line that runs, so a write missed by the setter-table rewrite
+# reaches the nearest catch instead of a checker. poll()'s catch turns one into "Backend
+# offline. Is the server running?" against a healthy server. This is the check that makes the
+# `set.*` asymmetry in state.js actually load-bearing.
+WRITE = r"\s*(?:=(?![=>])|[+\-*/%&|^]=|\*\*=|<<=|>>>?=|&&=|\|\|=|\?\?=|\+\+|--)"
 def blank(src):
     out = list(src); i = 0; n = len(src)
     while i < n:
@@ -73,24 +82,34 @@ state = open("js/state.js").read()
 m = re.search(r"export \{([^}]*)\};\s*$", state, re.S)
 shared = {x.strip() for x in m.group(1).split(",") if x.strip()}
 bad = []
+nimp = 0
 for f in sorted(os.listdir("js")):
     if not f.endswith(".js") or f == "state.js": continue
     src = open("js/" + f).read(); b = blank(src)
     imported = set()
     for im in re.finditer(r"import \{([^}]*)\} from", src, re.S):
         imported |= {x.strip() for x in im.group(1).split(",") if x.strip()}
+    nimp += len(imported)
     declared = set(re.findall(r"^(?:async\s+)?(?:function|const|let|var)\s+([A-Za-z0-9_$]+)", src, re.M))
     declared |= set(re.findall(r"(?:^|[;{(\s])(?:let|const|var)\s+([A-Za-z0-9_$]+)", b))
     for n in shared:
         if n in imported or n in declared: continue
         if re.search(r"(?<![.\w$])" + re.escape(n) + r"(?![\w$])", b):
             bad.append("%s uses %s" % (f, n))
-print("  MISSING: " + ", ".join(bad) if bad else "  ok (%d shared names checked)" % len(shared))
+    for n in sorted(imported):
+        for w in re.finditer(r"(?<![.\w$])" + re.escape(n) + WRITE, b):
+            bad.append("%s:%d assigns %s" % (f, b.count("\n", 0, w.start()) + 1, n))
+print("  MISSING: " + ", ".join(bad) if bad
+      else "  ok (%d shared names, %d imported bindings checked)" % (len(shared), nimp))
 sys.exit(1 if bad else 0)
 PYEOF
 
-echo "→ survey_server.py syntax"
-if python3 -m py_compile survey_server.py; then echo "  ok"; else fail=1; fi
+echo "→ python syntax"
+# survey_server.py is now 327 of ~1650 lines; the package holds the rest, so compiling only the
+# entry point checked a fifth of the back end.
+if python3 -m py_compile survey_server.py wifisurvey/*.py tests/*.py; then
+  echo "  ok ($(ls survey_server.py wifisurvey/*.py tests/*.py | wc -l | tr -d " ") files)"
+else fail=1; fi
 rm -rf __pycache__
 
 echo "→ DOM ids referenced by the js modules but missing from the HTML"
@@ -112,9 +131,34 @@ python3 - <<'PY' || fail=1
 import re, sys, os
 js   = "".join(open("js/"+f).read() for f in sorted(os.listdir("js")) if f.endswith(".js"))
 html = open("dashboard.html").read()
-defined  = set(re.findall(r'function\s+([A-Za-z0-9_$]+)', js))
-defined |= set(re.findall(r'(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?(?:function|\()', js))
+# Only what main.js puts on window is reachable from an inline handler. Matching any module
+# function instead would accept ~200 names the browser cannot resolve, which is how a missing
+# cancelLevelName survived: Escape during a floor rename threw ReferenceError.
+main = open("js/main.js").read()
+o = main.index("{", main.index("Object.assign(window, {"))
+d = 0
+for c in range(o, len(main)):
+    if main[c] == "{": d += 1
+    elif main[c] == "}":
+        d -= 1
+        if d == 0: break
+else:
+    sys.exit("  main.js: unterminated Object.assign(window, {...})")
+block = re.sub(r"//[^\n]*", "", main[o+1:c])
+defined = {n for n in (e.split(":")[0].strip() for e in block.split(","))
+           if re.fullmatch(r"[A-Za-z0-9_$]+", n)}
 called = set()
+# Handlers are written in two places: the static HTML, and template strings inside the modules
+# that build rows and tabs at runtime. Scanning only the HTML is why a missing cancelLevelName
+# went unnoticed until someone pressed Escape mid-rename.
+js_nc = re.sub(r"//[^\n]*", "", js)          # a comment showing onclick="foo()" is not a handler
+# ${...} inside an attribute is evaluated while the markup is BUILT, not when it is clicked,
+# so esc()/rate() in there are ordinary module calls and need no window exposure
+js_nc = re.sub(r"\$\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", "0", js_nc)
+# capture to the closing double quote: these handlers contain single quotes ('Enter'), so a
+# class excluding them truncates the attribute before the function name is reached
+for attr in re.findall(r'\son[a-z]+=\\?"([^"]*)"', js_nc):
+    called |= set(re.findall(r'(?<![.\w$])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(', attr))
 for attr in re.findall(r'\son[a-z]+="([^"]+)"', html):
     # bare calls only — skip method calls (preceded by a dot) and JS keywords
     called |= set(re.findall(r'(?<![.\w])([A-Za-z_$][A-Za-z0-9_$]*)\s*\(', attr))
