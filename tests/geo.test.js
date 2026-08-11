@@ -9,7 +9,10 @@ eval([
   grab("aerialBounds"), grab("mapToLatLonIn"), grab("reprojectFrac"), grab("haversineFt"),
 ].join("\n"));
 
-const SPAN_M = 305.7;                  // a z19 4x4 aerial spans about this
+const SPAN_M = 305.7;                  // z19 4x4 span AT THE EQUATOR; less by cos(lat) elsewhere
+                                       // (about 130 m at the far-north site). Only used to scale a
+                                       // residual into mm for the log line, so the equator figure
+                                       // is a safe over-estimate and never gates an assertion.
 const mm = (frac) => frac * SPAN_M * 1000;
 const TOL_MM = 0.001;                  // 1 micrometre — absurdly stricter than any GPS
 const metres = (a, b) =>

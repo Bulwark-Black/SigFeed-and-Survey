@@ -180,7 +180,10 @@ const CELL_BANDS = { rsrp: [[-80, "Excellent"], [-90, "Good"], [-100, "Fair"], [
 // One grade colour per surface. `print` is tuned for the PDF's white page; `screen` for the
 // dark UI. These were the same set, so the print palette was rendering on the dashboard at
 // 2.69:1 for Critical — the most prominent number in the product, least readable exactly when
-// the news was worst. Both sets pass AA on the surface they are for.
+// the news was worst. Every screen colour now clears 4.5:1 on the dark surface. In print they all
+// clear it on white except Good (#3f8f13) at 4.08:1, which is AA for large text only — and the
+// report sets it at 13px bold in the grade badge and 11px in the results table, so it does not
+// qualify. Don't restate this as "both sets pass AA"; that was the previous claim and it was false.
 // Poor and Critical share a red on screen deliberately: both are failing grades, the badge
 // prints the word next to the number, and every second red that clears 4.5:1 on this
 // background reads *lighter* than the first — i.e. less severe, which is backwards.

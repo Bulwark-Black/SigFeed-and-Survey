@@ -1,5 +1,8 @@
 // buildSurveyKml() is what a client actually opens. Its failures are silent — a folder that
 // never renders, a reading that appears twice, a boundary that quietly belongs to another floor.
+// esc() is also reimplemented below rather than imported, and the local copy escapes four
+// characters where the shipped esc() in js/report.js also escapes the apostrophe. So the two
+// "XML-escaped" assertions below check THIS file's esc(), not the shipped one.
 // Canvas isn't available in node, so heatOverlayPng is stubbed out; everything else is the real
 // shipped code.
 const { grab, grabConst, ok, section, done } = require("./helpers");

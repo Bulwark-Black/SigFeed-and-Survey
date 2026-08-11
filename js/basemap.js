@@ -474,15 +474,22 @@ function baseMapCredit() {
     earth.forEach((l) => {
       const a = l.aerial.accuracy;
       if (!a) return;
-      const ft = Math.round(mToFt(a.worst_m));
+      const raw = mToFt(a.worst_m);
+      const ft = Math.round(raw);
       // "accurate to about under 5 ft" is what gluing "about" to "under" produces. Below the
       // threshold the honest phrasing is a bound, not an estimate, so the whole clause switches.
-      const tol = ft <= EARTH_ACC_EXACT_FT
+      //
+      // Test `raw`, not `ft`. Rounding first made 5.4 ft print as "under 5 ft", which is a
+      // tolerance the capture does not meet, in a document a client relies on.
+      const tol = raw <= EARTH_ACC_EXACT_FT
         ? `accurate to under ${EARTH_ACC_EXACT_FT} ft`
         : `accurate to about ${ft} ft`;
       bits.push(`<b>${esc(l.name)}</b>: positions on this base map are ${tol}` +
-        (a.relief_m > 5 ? `, measured across ${Math.round(mToFt(a.relief_m))} ft of ground and ` +
-          `tree height in view. Readings beside tall trees or buildings near the edge of the ` +
+        // relief_m is max(elev) - min(elev) over the terrain probe grid (earth.py), so it is
+        // ground elevation only. The probes never touch a canopy, and lean on tall trees is a
+        // separate error on top of this one, not part of what was measured.
+        (a.relief_m > 5 ? `, measured in a view spanning ${Math.round(mToFt(a.relief_m))} ft of ` +
+          `terrain elevation. Readings beside tall trees or buildings near the edge of the ` +
           `picture are the least certain` : "") +
         (l.aerial.captured ? ` (captured ${String(l.aerial.captured).slice(0, 10)})` : "") + ".");
     });
@@ -495,9 +502,10 @@ function baseMapCredit() {
 // difference between a measurement and an implied precision that isn't there.
 function earthAccuracyNote(meta) {
   if (!meta || meta.source !== "earth" || !meta.accuracy) return "Captured base map.";
-  const ft = Math.round(mToFt(meta.accuracy.worst_m));
+  const raw = mToFt(meta.accuracy.worst_m);          // test unrounded: 5.4 ft is not "under 5 ft"
+  const ft = Math.round(raw);
   const when = meta.captured ? " · captured " + String(meta.captured).slice(0, 10) : "";
-  if (ft <= EARTH_ACC_EXACT_FT) return `Google Earth · positions accurate to under ${EARTH_ACC_EXACT_FT} ft${when}`;
+  if (raw <= EARTH_ACC_EXACT_FT) return `Google Earth · positions accurate to under ${EARTH_ACC_EXACT_FT} ft${when}`;
   return `Google Earth · positions accurate to about ${ft} ft. Tall trees and buildings near the ` +
          `edges are the least certain${when}`;
 }
@@ -520,7 +528,8 @@ function gpsToMap(fix) {
 }
 
 // Inverse transform: aerial 0..1 relative coords → {lat,lon}. Exact inverse of
-// gpsToMap (round-trips to ~1e-14). Requires geoBounds — returns null without it.
+// gpsToMap (round-trips to ~1e-14). Takes the bounds as an argument and never reads the
+// module-level geoBounds, so it returns null only when that argument is missing.
 // Project an image fraction back to lat/lon through a SPECIFIC level's aerial bounds. Each
 // level has its own aerial, so anything walking across levels (the KML export) has to use the
 // bounds belonging to the reading's own level — pushing them all through the active level's

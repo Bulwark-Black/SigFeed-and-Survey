@@ -85,7 +85,7 @@ so the client refuses to open a second link once this session has opened one.
 
 ## Tests
 
-`./check.sh` catches syntax and dangling references. `./test.sh` (202 assertions, no dependencies; 216 with `--net`)
+`./check.sh` catches syntax and dangling references. `./test.sh` (223 assertions, no dependencies; 237 with `--net`)
 catches wrong ANSWERS — coordinate maths judged in ground metres, the KMZ writer at the byte level,
 export contents, server logic and auth. `./test.sh --net` additionally re-verifies Esri and NAIP
 against the live services, including that Esri's placeholder digest still matches.
@@ -111,10 +111,15 @@ Twelve confirmed out of twenty-two candidates. The ones worth remembering:
   `action_live_push` advertised 4 MB, and the client discarded the 413 — so Earth kept redrawing a
   frozen frame. The cap is now per-route, and a stalled push says so once.
 
-Verified on the Google Earth capture: absolute georeference cross-checked against Esri imagery
-rendered at the same computed bounds — the same fixed structure landed within **2.3 m** on a
-229x145 m frame. Frame centre 1.78 m from the requested point. Fraction round-trip exact to 1.3e-9 m.
-Derived ground width 731 ft against 732 expected.
+Verified once by hand on a Google Earth capture. This was a **one-off check, not reproducible from
+this repo**: the absolute georeference was cross-checked against Esri imagery rendered at the same
+computed bounds, and the same fixed structure landed within **2.3 m**, with the frame centre 1.78 m
+from the requested point. A "derived ground width 731 ft against 732 expected" figure used to sit
+here; it was wrong and has been dropped (the frame it cites is 229 m across, which is 751 ft).
+
+What the suite *does* reproduce, from `tests/geo.test.js`, run on demand: a worst fraction
+round-trip residual of **1.58e-9 m** across every zoom pair at every site (asserted under 1e-6 m),
+and a derived ground width of **721 ft against 722 expected**.
 
 **Do NOT crop the burned-in Google Earth chrome.** The plan originally called for cropping the
 bottom status strip. Measured pixel rows across two captures at the same y: mean colour differs
@@ -175,8 +180,11 @@ Client-side only. No server changes, no API key problem. KMZ is a zip; stored en
 
 Public domain, no key. Served by the USGSNAIPPlus ImageServer `exportImage`
 endpoint — one bbox request, not z/x/y tiles, so it needs a sibling `action_aerial()` rather than a
-change to `action_tile()`. Geometry lines up: the current z19 4x4 grid spans 305.7 m, which at
-1024 px is 0.299 m/px against NAIPPlus's declared 0.3 m.
+change to `action_tile()`. Geometry lines up: a z19 4x4 grid is 305.7 m across *at the equator*, and
+Web Mercator shrinks that by cos(latitude), so over the contiguous US it spans roughly 200 to 275 m.
+At 1024 px that is about 0.20 to 0.27 m/px against NAIPPlus's declared 0.3 m, i.e. oversampled
+rather than starved. (The 0.299 m/px figure previously quoted here was the equator case, where NAIP
+has no coverage at all.)
 
 **Must be tested before committing.** NAIP flies leaf-on, May–September. On wooded parcels the canopy
 hides structures and driveways, which for this work may be worse than Esri despite being sharper.

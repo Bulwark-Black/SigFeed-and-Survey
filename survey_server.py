@@ -19,8 +19,12 @@ That makes the trust boundary the local network, so:
     when it is served; the GPS URL shown on the GPS page already carries it.
   * The Host header is checked, which is what stops a web page the technician
     happens to be browsing from reaching this server by rebinding a DNS name.
-  * POSTs must be application/json, so a cross-origin form post can't reach an
-    endpoint without first passing a CORS preflight (which is never answered).
+  * POSTs whose Content-Type is neither application/json nor text/plain are
+    rejected with 415. Treat that as a typo guard, NOT a defence: text/plain is
+    CORS-safelisted, so a form using enctype="text/plain" (or a plain fetch)
+    still arrives as a simple request with no preflight, and a request sending
+    no Content-Type at all skips the check entirely. The key is what actually
+    stops a cross-origin POST.
 Anyone already on the same LAN who can load the dashboard can read the key from
 it — that is inherent to serving the UI to a phone. The key is aimed at the
 realistic attack, which is a malicious web page, not a hostile guest network.

@@ -7,6 +7,10 @@ cloud or login, nothing to install but Python 3.
 
 > **Full walkthrough:** see **[USER_GUIDE.md](USER_GUIDE.md)**, how to run a
 > clean survey end to end, page by page. This README is just the quick start.
+>
+> **[CORRECTIONS.md](CORRECTIONS.md)** lists statements this project published
+> that were not true, and what replaced them. Earlier versions of this README
+> presented unit-test fixtures as field measurements; that is documented there.
 
 ## Start it
 

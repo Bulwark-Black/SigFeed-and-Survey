@@ -155,7 +155,10 @@ def action_tile(z, x, y):
 
 
 # ---------------------------------------------------------------------------
-# USDA NAIP — public-domain aerial imagery, no key, real capture dates
+# USDA NAIP — public-domain aerial imagery, no key.
+#
+# No capture date: the request is f=image, which returns rendered pixels and no metadata, so
+# nothing here knows when the imagery was flown. Don't claim one without fetching it.
 #
 # Served as one bbox render rather than z/x/y tiles, so it can't go through action_tile(). The
 # caller passes the exact lat/lon box it wants and gets back a picture of precisely that box,

@@ -32,7 +32,7 @@ const TIPS = [
   { term: "Survey type", tip: "In-house, Around the house, Property, or All: picks which tools you see so the screen stays simple. Switching never deletes your work." },
   { term: "Aerial base map", tip: "A satellite image pulled from an address, used as the map you tap readings onto. No floor plan needed. Best for outdoor and property jobs." },
   { term: "GPS walk & drop", tip: "Stream your phone's location to the Mac and drop a reading at your exact spot as you walk the property. No Google Earth Pro needed." },
-  { term: "Contour lines", tip: "Topographic-style lines on the heatmap, each marking one signal level (e.g. −67), so you can see exactly where 'Good' turns into 'Fair'." },
+  { term: "Contour lines", tip: "Topographic-style lines on the heatmap, each labelled with its value. The app picks a handful of round levels across whatever metric the map is showing (for signal, usually every 2 or 5 dBm), so you can see how steeply coverage falls off across a space." },
   { term: "KMZ / Google Earth export", tip: "Saves the coverage heatmap, every reading, your boundary and the routers as a .kmz that opens in Google Earth or goes to the client." },
   { term: "CSV export", tip: "Every reading as a spreadsheet row: room, floor, band, channel, RSSI, SNR, rate, rating, GPS. For records or a client who wants raw numbers." },
   { term: "Speed test gauge", tip: "A one-tap needle sweep for download, upload, and responsiveness, measuring your real internet path with macOS's built-in tool." },
@@ -44,7 +44,7 @@ const TIPS = [
   { term: "Signal verdict (cellular)", tip: "A plain Excellent/Good/Fair/Poor grade for the gateway signal: the worse of coverage (RSRP) and quality (SINR), so a strong-but-noisy signal isn't called good." },
 ];
 const GUIDE_TOOLS = [
-  { name: "This app (survey → heatmap + report)", when: "Every job needing a coverage map or client report: the walk where you tap the floor plan. It's your deliverable.", not: "Not a live channel troubleshooter, not cellular, not security capture. Diagnose the 'why' with WiFi Explorer." },
+  { name: "This app (survey → heatmap + report)", when: "Every job needing a coverage map or client report: the walk where you tap the floor plan. It's your deliverable.", not: "Not a live channel troubleshooter, not a packet-capture or security tool. Diagnose the 'why' with WiFi Explorer." },
   { name: "WiFi Explorer", when: "When you need to know WHY coverage is bad: channels in use, co-channel overlap, competing networks, SNR. Run it before retuning the router.", not: "Doesn't build heatmaps or a report. It describes the air where you stand, not coverage across the house." },
   { name: "NetSpot", when: "A quick visual second-opinion heatmap on-site.", not: "Free tier CAN'T save or export, so it can't be your deliverable. Don't run the billable survey in it." },
   { name: "Apple Wireless Diagnostics (built-in)", when: "The always-available fallback: a quick signal/noise/rate check or a packet capture.", not: "Coarse for channel planning and no report. Use it when nothing else is handy." },
@@ -53,7 +53,7 @@ const GUIDE_TOOLS = [
 ];
 const GUIDE_FLOW = [
   "<b>Start at Mission Control:</b> name the survey (client details on the Report page). The home page tracks your progress and score as you go.",
-  "<b>Get a base map:</b> on Coverage, draw a schematic, upload a floor plan or photo, auto-layout from a room list, or pull a satellite image from an address. Set a scale (🛠 Tools → Set scale) so everything reads in real square footage.",
+  "<b>Get a base map:</b> on Coverage, draw a schematic, upload a floor plan or photo, auto-layout from a room list, or pull a satellite image from an address. On an uploaded plan or photo, set a scale (🛠 Tools → 📏 Set scale) so areas read in real square feet. An aerial already has true scale from GPS; a drawn schematic has none, so type the home's total sq ft at the top of the Coverage page for rough per-room estimates.",
   "<b>Map the property (optional):</b> on Site Plan, draw the house and walk the yard boundary by GPS to produce a plot plan of the whole lot.",
   "<b>Aim the gateway (if cellular):</b> use the Cellular page to find the best SINR/RSRP spot, watch the Excellent/Good/Fair/Poor verdict, then survey the Wi-Fi it puts out.",
   "<b>Survey:</b> walk and tap where you stand, indoors on the floor plan, outdoors by phone GPS. Pick a target (Voice / Data / Video) and watch % passing climb. The heatmap builds live.",
@@ -64,7 +64,7 @@ const GUIDE_PAGES = [
   { name: "Mission Control", desc: "Your home base. The whole survey at a glance. A 0–100 signal score, live vitals (rooms, best/worst, dead spots in ft², % passing, area), a progress checklist, top findings you can locate on the map, quick links to every tool, and the one-click Generate Report." },
   { name: "Live", desc: "Stand somewhere and read the signal right now: a big live gauge plus a one-tap speed test (download / upload / responsiveness). Use it to hunt a dead spot or find the best router shelf." },
   { name: "Coverage", desc: "The main survey. Build a base map, walk and tap where you stand, and the heatmap builds live. Pick a target (Voice/Data/Video) for a live % passing, set a scale for real square footage, add contour lines, and use Predict coverage to model APs before you walk. Tools are grouped under the 🛠 Tools menu." },
-  { name: "Site Plan", desc: "A plot plan for the whole property. Draw the house footprint by hand, walk the yard boundary with your phone GPS (to real scale), then drop the house where it sits on the lot. House and property are separate objects you can place, rotate, and resize." },
+  { name: "Site Plan", desc: "A plot plan for the whole property. Draw the house footprint by hand, walk the yard boundary with your phone GPS (to real scale), then drop the house where it sits on the lot. The house is a separate object you can drag, rotate and resize over the property outline." },
   { name: "Cellular", desc: "Aim a home cellular gateway or antenna. Live bars plus RSRP / RSRQ / SINR with Excellent/Good/Fair/Poor grades and an overall verdict find the window or wall with the best tower signal. Aim this first, then survey the Wi-Fi." },
   { name: "GPS", desc: "Walk a property outdoors. Your phone streams its location to the Mac; drop readings and property corners as you walk, trace a boundary, and export the survey to Google Earth (.kmz)." },
   { name: "Report", desc: "Client details, the 0–100 score with plain-English findings, an infrastructure & security summary, and site photos. Make the report, then Save as PDF. Also where you save, export (.json/.csv/.kmz), or re-open a survey." },

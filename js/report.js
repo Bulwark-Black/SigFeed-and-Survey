@@ -89,9 +89,9 @@ function computeInsights(pts, site, env) {
   // Area has to be measured over the readings that actually sit on the map — `sig` includes
   // Live-page readings with no position (x/y NaN) and readings from other floors, which drove
   // this figure to 0 and silently dropped the sentence while the dashboard still showed a count.
-  if (dead.length) { const w = dead.reduce((a, b) => (b.signal < a.signal ? b : a)); const holeFt = holeAreaSqft(-75, mappedPoints(pts)); const areaTxt = holeFt ? ` About <b>${fmtSqft(holeFt)}</b> of the surveyed area falls below −75 dBm.` : ""; F.push({ severity: "critical", text: `<b>${dead.length} dead zone${dead.length > 1 ? "s" : ""}</b> below −75 dBm: ${nm(dead)}.${areaTxt} The worst is ${esc(w.location)} at ${w.signal} dBm. Wi-Fi calls drop and smart devices fall offline here.`, rec: `Add a mesh node or wired access point roughly midway between the router and ${esc(w.location)}. A wired-backhaul node beats a repeater since the feeding signal is already ${w.signal} dBm. Re-measure to confirm the far rooms clear −67 dBm.`, loc: locOf(w) }); }
+  if (dead.length) { const w = dead.reduce((a, b) => (b.signal < a.signal ? b : a)); const holeFt = holeAreaSqft(-75, mappedPoints(pts)); const areaTxt = holeFt ? ` About <b>${fmtSqft(holeFt)}</b> of the surveyed area falls below −75 dBm.` : ""; F.push({ severity: "critical", text: `<b>${dead.length} dead zone${dead.length > 1 ? "s" : ""}</b> below −75 dBm: ${nm(dead)}.${areaTxt} The worst is ${esc(w.location)} at ${w.signal} dBm. Expect Wi-Fi calls to drop and smart devices to fall offline here.`, rec: `Add a mesh node or wired access point roughly midway between the router and ${esc(w.location)}. A wired-backhaul node beats a repeater since the feeding signal is already ${w.signal} dBm. Re-measure to confirm the far rooms clear −67 dBm.`, loc: locOf(w) }); }
   if (marg.length) { const wm = marg.reduce((a, b) => (b.signal < a.signal ? b : a)); F.push({ severity: "warning", text: `${marg.length} marginal location${marg.length > 1 ? "s" : ""} (−68 to −75 dBm): ${nm(marg)}. Fine for browsing, borderline for 4K, video calls, and gaming when busy.`, rec: dead.length ? "Position any new access point so it overlaps both the dead zones and these rooms." : "Relocate the gateway higher and more central first; add one AP only if these rooms are heavily used.", loc: locOf(wm) }); }
-  if (lowSnr.length) { const w = lowSnr.reduce((a, b) => (b.snr < a.snr ? b : a)); F.push({ severity: "warning", text: `${lowSnr.length} location${lowSnr.length > 1 ? "s" : ""} show strong signal but noisy air (SNR under 15 dB): ${nm(lowSnr)}. Lowest is ${esc(w.location)} at SNR ${w.snr} dB. Bars look fine but throughput suffers.`, rec: "This is interference, not distance. Adding an AP won't help. Move the gateway to a cleaner channel (2.4 GHz: stick to 1/6/11).", loc: locOf(w) }); }
+  if (lowSnr.length) { const w = lowSnr.reduce((a, b) => (b.snr < a.snr ? b : a)); F.push({ severity: "warning", text: `${lowSnr.length} location${lowSnr.length > 1 ? "s" : ""} show strong signal but noisy air (SNR under 15 dB): ${nm(lowSnr)}. Lowest is ${esc(w.location)} at SNR ${w.snr} dB. Bars look fine but throughput suffers.`, rec: "Signal strength isn't the problem here, background noise is, which usually points to interference rather than distance. Move the gateway to a cleaner channel first (2.4 GHz: stick to 1/6/11). A closer access point does raise the signal, but it can't lower the noise.", loc: locOf(w) }); }
   if (co.length >= 2) { const top = co.slice(0, 3).map((n) => esc(n.ssid || "(hidden)")).join(", "); F.push({ severity: "warning", text: `Channel ${scanEnv.current.channel} (${scanEnv.current.band || "?"}) is crowded: ${co.length} neighboring networks share it${top ? ", including " + top : ""}. Co-channel networks split airtime even at full signal.`, rec: "Change the gateway's channel to a quieter one (2.4 GHz: least-busy of 1/6/11) or enable auto-channel. Keep 2.4 GHz at 20 MHz width." }); }
   if (all24 && has5) F.push({ severity: "warning", text: "Every surveyed room connected on 2.4 GHz even though 5 GHz is available nearby. The client is stuck on the slower, congested band, capping speeds regardless of signal.", rec: "Enable band steering (single SSID, router picks the band) or manually join 5 GHz near the router. Keep 2.4 GHz for far rooms and IoT." });
   if (scanEnv && scanEnv.current) {
@@ -104,12 +104,15 @@ function computeInsights(pts, site, env) {
     if (sixBad) F.push({ severity: "warning", text: `${sixBad} access point${sixBad > 1 ? "s are" : " is"} broadcasting on 6 GHz without WPA3. The 6 GHz band mandates WPA3/OWE.`, rec: "Reconfigure those APs for WPA3; some clients won't connect to a non-compliant 6 GHz SSID." });
   }
   if (plan && thr.length) { const low = thr.filter((p) => p.download_mbps < plan * 0.5); if (low.length) { const w = low.reduce((a, b) => (b.download_mbps < a.download_mbps ? b : a)); F.push({ severity: "warning", text: `Throughput fell below half the ${plan} Mbps plan at ${nm(low)}. Slowest: ${esc(w.location)} at ${w.download_mbps} Mbps (${Math.round(w.download_mbps / plan * 100)}% of plan).`, rec: "Where this tracks weak signal, fixing coverage fixes speed. Where signal is strong but speed is low, suspect 2.4 GHz, congestion, or the WAN feed. Run a wired test at the gateway." }); } }
-  if (levels.length > 1) levels.forEach((L) => { const fp = pts.filter((p) => p.level === L.id && p.signal != null); if (fp.length && fp.filter((p) => p.signal < -75).length / fp.length >= 0.5) F.push({ severity: "critical", text: `${esc(L.name)} is under-served: ${Math.round(fp.filter((p) => p.signal < -75).length / fp.length * 100)}% of its readings are dead zones. Wi-Fi struggles to pass between floors.`, rec: `Add an access point on ${esc(L.name)}, ideally stacked near the router's vertical position or wired back to it. Re-survey after adding.` }); });
+  if (levels.length > 1) levels.forEach((L) => { const fp = pts.filter((p) => p.level === L.id && p.signal != null); if (fp.length && fp.filter((p) => p.signal < -75).length / fp.length >= 0.5) F.push({ severity: "critical", text: `${esc(L.name)} is under-served: ${Math.round(fp.filter((p) => p.signal < -75).length / fp.length * 100)}% of its readings are dead zones. The existing coverage is not reaching this level.`, rec: `Add an access point on ${esc(L.name)}, ideally stacked near the router's vertical position or wired back to it. Re-survey after adding.` }); });
   if (cellPoints.length) {
     const b = bestCellSpot();
     const allBad = cellPoints.every((c) => (c.nr_sinr == null || c.nr_sinr < 0) && (c.lte_sinr == null || c.lte_sinr < 0));
-    if (allBad) F.push({ severity: "critical", text: `Every candidate spot shows poor cellular quality (SINR below 0 dB). Best was ${esc(b.location)} at 5G SINR ${b.nr_sinr ?? b.lte_sinr}. The gateway's WAN feed caps every downstream Wi-Fi speed.`, rec: "Improve the gateway signal first: try upper floors and windows facing the tower; mount the Waveform 2×2 antenna outside/high with clear line-of-sight until 5G SINR clears +5 dB." });
-    else if (bestSinr != null && bestSinr < 13) F.push({ severity: "warning", text: `The best cellular spot (${esc(b.location)}) is only marginal at 5G SINR ${bestSinr} dB, usable but short of the 13+ dB that gives reliable full-speed service.`, rec: "Keep hunting: try higher and nearer a window facing the tower, and test an external antenna before committing." });
+    // bestSinr falls back to LTE when the gateway reports no 5G (see bestSinr above), so the label
+    // has to follow the number. Printing an LTE figure under a "5G SINR" heading put a measurement
+    // in a client's PDF that the gateway never reported.
+    if (allBad) F.push({ severity: "critical", text: `No candidate spot reported a usable cellular signal (SINR of 0 dB or better). ${b.nr_sinr != null ? `Best was ${esc(b.location)} at 5G SINR ${b.nr_sinr}.` : b.lte_sinr != null ? `Best was ${esc(b.location)} at LTE SINR ${b.lte_sinr}.` : "The gateway reported no SINR at any spot, so the spots could not be ranked."} The gateway's WAN feed caps every downstream Wi-Fi speed.`, rec: "Improve the gateway signal first: try upper floors and windows facing the tower; mount the Waveform 2×2 antenna outside/high with clear line-of-sight until 5G SINR clears +5 dB." });
+    else if (bestSinr != null && bestSinr < 13) F.push({ severity: "warning", text: `The best cellular spot (${esc(b.location)}) is only marginal at ${b.nr_sinr != null ? "5G" : "LTE"} SINR ${bestSinr} dB, usable but short of the 13 dB usually treated as the line for reliable full-speed service.`, rec: "Keep hunting: try higher and nearer a window facing the tower, and test an external antenna before committing." });
     else F.push({ severity: "good", text: `Best cellular placement is ${esc(b.location)}: 5G SINR ${b.nr_sinr ?? "—"} dB, RSRP ${b.nr_rsrp ?? "—"} dBm. A clean spot for the gateway.`, rec: `Mount the gateway and Waveform 2×2 antenna at ${esc(b.location)} with clear line-of-sight to the tower. SINR matters more than RSRP. Favor the cleaner signal.` });
   }
   if (pts.length >= 4 && !dead.length && !marg.length && !lowSnr.length) F.push({ severity: "good", text: `Coverage is solid across all ${distinctRooms(pts)} surveyed rooms. Every reading is Good or better with clean SNR. No dead zones, no interference flags.`, rec: "No additional access points needed. Keep the gateway in place; re-survey the far corners if the device count grows." });
@@ -150,8 +153,10 @@ function genReport() {
   w.document.close();
 }
 
-// Includes the apostrophe: several attributes in this file are single-quoted, and a name
-// containing one would otherwise close the attribute early.
+// Includes the apostrophe. Nothing in this file needs it, since every attribute here is
+// double-quoted, and it does not make pages.js's inline onclick safe either: the HTML parser turns
+// &#39; back into ' before the JS string is parsed. It stays as a cheap default in case a
+// single-quoted attribute is added later.
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -198,18 +203,21 @@ function buildReport(site, pts) {
   const roomKeys = Object.keys(byRoom), totalRooms = roomKeys.length;
   const roomsGood = roomKeys.filter((k) => byRoom[k].every((p) => p.signal == null || p.signal >= -67)).length;
   const mappedNow = mappedPoints(pts);
-  let covPct = null;
-  if (reqProfile !== "none") { const rs = requirementStats(mappedNow); if (rs.ok) covPct = rs.pct; }
-  if (covPct == null && signals.length) covPct = Math.round((100 * signals.filter((s) => s >= -67).length) / signals.length);
+  // Two different numbers used to share one label. The target figure is an area estimate over the
+  // mapped floor; the fallback is a plain count of readings. Calling either "of the home covered
+  // well" overstated both, since neither knows about the parts of the home nobody walked.
+  let covPct = null, covLabel = "";
+  if (reqProfile !== "none") { const rs = requirementStats(mappedNow); if (rs.ok) { covPct = rs.pct; covLabel = "of the mapped floor meeting the target"; } }
+  if (covPct == null && signals.length) { covPct = Math.round((100 * signals.filter((s) => s >= -67).length) / signals.length); covLabel = "of readings at −67 dBm or better"; }
   const areaFtR = surveyedSqft(mappedNow), holeFtR = dead.length ? holeAreaSqft(-75, mappedNow) : 0;
   const gword = (ins.grade || "").toLowerCase();
   const verdict = dead.length === 0
-    ? `The Wi-Fi here is <b>${gword}</b>. Every room we surveyed has reliable coverage, with no dead zones to fix.`
+    ? `The Wi-Fi here is <b>${gword}</b>. No reading fell into the dead-zone range (below −75 dBm), so there are no dead zones to fix.`
     : `The Wi-Fi here is <b>${gword}</b> overall, but <b>${dead.length} area${dead.length > 1 ? "s" : ""}</b> ${dead.length > 1 ? "need" : "needs"} attention before coverage is solid everywhere.`;
   const blk = (n, l, color) => `<div class="blk"><div class="blk-n"${color ? ` style="color:${color}"` : ""}>${n}</div><div class="blk-l">${l}</div></div>`;
   const bottomLine = `<div class="bottomline">${healthBadge(ins, 108)}<div class="bl-main"><div class="bl-verdict">${verdict}</div><div class="bl-kpis">
     ${blk(roomsGood + " / " + totalRooms, "rooms with strong Wi-Fi")}
-    ${covPct != null ? blk(covPct + "%", "of the home covered well") : ""}
+    ${covPct != null ? blk(covPct + "%", covLabel) : ""}
     ${blk(dead.length, "dead zone" + (dead.length !== 1 ? "s" : "") + (holeFtR ? " · " + fmtSqft(holeFtR) : ""), dead.length ? "#dc2626" : "#15803d")}
     ${areaFtR ? blk(fmtSqft(areaFtR), "area surveyed") : ""}
   </div></div></div>`;
@@ -294,7 +302,7 @@ function buildReport(site, pts) {
       ? `<h2>Coverage Heatmap</h2><img class="hm" src="${safeImgSrc(coverImg)}">${cur ? floorFigures(cur) : ""}` : "";
   }
   if (heatmapSection) {
-    heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label}. Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}), weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. 📡 marks router/access-point locations.</p>
+    heatmapSection += `<p class="legend">Heatmap metric: ${heatMode === "passfail" ? `${HM.label}. Pass/Fail (${heatPreset}): pass ≥ ${HM.th[heatPreset][0]} ${HM.unit}` : `${HM.label} (${HM.unit}), weak <span style="display:inline-block;width:84px;height:9px;border-radius:5px;vertical-align:-1px;background:${colormapCss()}"></span> strong`}. Routers and access points are marked with a blue dot and a name label above it.</p>
       <p class="legend">Each reading is marked <b>E</b> excellent, <b>G</b> good, <b>W</b> weak or <b>D</b> dead zone, so the map reads correctly in greyscale and with colour blindness.</p>`;
     heatmapSection += baseMapCredit();
   }
@@ -323,7 +331,7 @@ function buildReport(site, pts) {
       : env && env.ts ? `Recorded during the survey, ${new Date(env.ts).toLocaleString()}.`
       : "Read live when this report was generated, not during the survey. Treat as indicative.";
     rfSection = `<h2>Interference &amp; Nearby Networks</h2>
-      <p>${importedScan.length ? `Imported WiFi&nbsp;Explorer scan of <b>${scan.length}</b> networks. ` : `${cur ? `The network was surveyed on <b>channel ${cur.channel} (${cur.band || "?"})</b>. ` : ""}`}${co.length ? `<b>${co.length}</b> neighboring network${co.length > 1 ? "s share" : " shares"} the surveyed channel, a common cause of slowdowns even at full signal.` : "No neighbors share the surveyed channel. The RF environment is clean."} ${scan.length} networks detected in total.</p>
+      <p>${importedScan.length ? `Imported WiFi&nbsp;Explorer scan of <b>${scan.length}</b> networks. ` : `${cur ? `The network was surveyed on <b>channel ${cur.channel} (${cur.band || "?"})</b>. ` : ""}`}${co.length ? `<b>${co.length}</b> neighboring network${co.length > 1 ? "s share" : " shares"} the surveyed channel, a common cause of slowdowns even at full signal.` : cur ? "No other network was seen on the surveyed channel. Adjacent-channel overlap and non-Wi-Fi interference are not assessed." : "No connected network was recorded with this scan, so channel overlap could not be checked."} ${scan.length} networks detected in total.</p>
       <p class="legend">${when}</p>
       <div class="tw"><table><thead><tr>${rfHead}</tr></thead><tbody>${nrows}</tbody></table></div>`;
   }
@@ -523,7 +531,7 @@ ${cellSection}
 </div>
 
 <h2>Methodology &amp; Notes</h2>
-<p>Wi-Fi readings were taken with a MacBook (built-in Wi-Fi radio) using native macOS telemetry (<i>system_profiler</i>), Apple's <i>networkQuality</i> for throughput, and <i>ping</i> for latency/loss. One reading per room, device held ~1 m off the floor, stationary. Cellular placement readings come from the gateway's own 5G/LTE SINR &amp; RSRP telemetry. Coverage heatmaps are interpolated between measured points. This survey does not assess non-Wi-Fi (spectrum) interference, which requires dedicated hardware.</p>
+<p>Wi-Fi readings were taken with a MacBook (built-in Wi-Fi radio) using native macOS telemetry (<i>system_profiler</i>), Apple's <i>networkQuality</i> for throughput, and <i>ping</i> for latency/loss. Readings were taken at named spots with the device held still at each one; larger rooms may hold more than one, and every reading is listed separately in the room-by-room table. Cellular placement readings come from the gateway's own 5G/LTE SINR &amp; RSRP telemetry. Coverage heatmaps are interpolated between measured points. This survey does not assess non-Wi-Fi (spectrum) interference, which requires dedicated hardware.</p>
 <footer>Generated ${today} · Wi-Fi Site Survey. Readings are point-in-time and vary with device, orientation, and interference. Wi-Fi signal score is an automated estimate to guide decisions, not a guarantee.</footer>
 </body></html>`;
 }

@@ -71,10 +71,13 @@ except Exception as e:  # noqa: BLE001
     ok(False, "could not fetch the placeholder to re-verify its digest", str(e)[:60])
 
 section("USDA NAIP")
+# Deliberately NOT labelled with place names. These are coverage probes, not field sites, and
+# earlier labels ("Missouri farmland", "Florida suburb") ended up quoted in the README as if they
+# were measurements taken at those places. Describe the terrain, name no location.
 COVERED = [
-    (-95.51, -95.49, 40.06, 40.04, "Missouri farmland"),
-    (-80.21, -80.19, 26.06, 26.04, "Florida suburb"),
-    (-111.05, -111.03, 45.69, 45.67, "Montana"),
+    (-95.51, -95.49, 40.06, 40.04, "rural cropland"),
+    (-80.21, -80.19, 26.06, 26.04, "coastal suburb"),
+    (-111.05, -111.03, 45.69, 45.67, "mountain west"),
 ]
 for w, e, n, s, label in COVERED:
     ctype, body = srv.action_naip(w, e, n, s, 512)

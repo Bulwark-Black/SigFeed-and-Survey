@@ -132,8 +132,10 @@ def live_kml():
 
 
 def live_loader_kml():
-    """The tiny file Google Earth actually opens. Written fresh every time, so it always carries
-    the current run's key — that is what stops a saved copy from 403ing after a restart.
+    """The tiny file Google Earth actually opens. Its href carries LIVE_TOKEN, not the per-run
+    API_KEY: that token persisting on disk is what stops a NetworkLink made on an earlier run
+    from 403ing after a restart. (Writing a fresh filename each time is a separate matter, and
+    for a different reason — see action_live_open.)
 
     flyToView 0 and refreshVisibility 0 matter: without them Earth seizes the camera and resets
     the technician's own layer checkboxes every few seconds while they are trying to work.

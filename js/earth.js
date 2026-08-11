@@ -213,7 +213,7 @@ function buildSurveyKml(opts) {
     // heatmap ground overlay, in THIS level's box.
     // Live mode carries only the ACTIVE level: the overlay travels as base64 in a POST body,
     // and one level at 512px is the difference between a comfortable push and one that trips
-    // the server's 1 MiB body cap mid-walk.
+    // the server's 8 MiB cap on /api/live/push mid-walk (every other POST route is capped at 1).
     const wantOverlay = geo && mapped.length && (!live || L.id === activeLevel);
     if (wantOverlay) {
       const png = heatOverlayPng(mapped, geo, live ? 512 : 1024, L.perimeter);
@@ -227,10 +227,6 @@ function buildSurveyKml(opts) {
           ? `http://127.0.0.1:${location.port || 8765}/api/live/overlay.png?k=${encodeURIComponent(LIVE_TOKEN || API_KEY)}&v=${liveVersion}`
           : `overlay_${li}.png`;
         if (live) overlay = png; else files.push({ name: href, bytes: dataUrlToBytes(png) });
-        // Clamped to the ground, the wash is drawn UNDER Google Earth's 3D trees and buildings —
-        // on a wooded lot it disappears exactly where the survey matters most. Floating it above
-        // the canopy keeps it visible. relativeToGround (not absolute) so it follows terrain on
-        // a slope instead of cutting into a hillside.
         // Google Earth's 3D trees and buildings always draw OVER a GroundOverlay, so on a wooded
         // lot the wash shows through gaps in the canopy and nowhere else. Measured: raising the
         // overlay to 250 m with relativeToGround changes nothing — the occlusion is render order,

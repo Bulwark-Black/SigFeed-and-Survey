@@ -52,7 +52,9 @@ function updateGauge(signal, r) {
 // needle tip radius 92, f=0 -> left/180deg, f=1 -> right/0deg. Direct-tip needle (NO rotate).
 
 
-// smallest "nice" full-scale >= v*1.1, so the needle never pegs and the dial stays readable
+// smallest "nice" full-scale >= v*1.1, so the needle keeps headroom off the stop and the dial stays
+// readable. The step list tops out at 2000: past ~1818 Mbps that headroom shrinks, and at 2000 and
+// above the needle does peg, because updateSpeedGauge clamps the fraction to 1.
 function niceMax(v) {
   const steps = [50, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000];
   const target = (v || 0) * 1.1;
